@@ -1,6 +1,7 @@
 #include "render/Renderer.h"
 
 #include "core/Log.h"
+#include "editor/EditorUi.h"
 #include "render/passes/ForwardPass.h"
 
 #include "rhi/Device.h"
@@ -41,6 +42,7 @@ Renderer::Renderer(rhi::Device& device, rhi::Swapchain& swapchain, GLFWwindow* w
     glfwSetCursorPosCallback(window_, cursorPositionCallback);
     glfwSetMouseButtonCallback(window_, mouseButtonCallback);
     glfwSetKeyCallback(window_, keyCallback);
+    editorUi_ = std::make_unique<editor::EditorUi>(device_, swapchain_, window_);
     lastFrameTime_ = glfwGetTime();
 }
 
@@ -49,6 +51,7 @@ Renderer::~Renderer() {
     gpuBuildJobs_.waitIdle();
     device_.waitIdle();
     camera_.releaseInput(window_);
+    editorUi_.reset();
     glfwSetCursorPosCallback(window_, nullptr);
     glfwSetMouseButtonCallback(window_, nullptr);
     glfwSetKeyCallback(window_, nullptr);
@@ -72,6 +75,10 @@ void Renderer::drawFrame() {
     }
     if (swapchain_.framebufferExtentChanged()) {
         recreateSwapchain();
+    }
+    if (editorUi_->beginFrame(shaderReloadInFlight(), shaderReloads_.generation(),
+                              lastAppliedShaderGeneration_)) {
+        static_cast<void>(requestShaderReload());
     }
 
     auto& frame = frames_[frameIndex_];
@@ -293,8 +300,12 @@ void Renderer::destroyPresentSemaphores() noexcept {
 }
 
 void Renderer::recordFrame(const VkCommandBuffer commandBuffer, const std::uint32_t imageIndex) {
-    forwardPass_->record(commandBuffer, swapchain_.image(imageIndex), swapchain_.imageView(imageIndex),
+    const VkImage colorImage = swapchain_.image(imageIndex);
+    const VkImageView colorView = swapchain_.imageView(imageIndex);
+    forwardPass_->record(commandBuffer, colorImage, colorView,
                          swapchain_.extent(), camera_.viewProjection(swapchain_.extent()));
+    editorUi_->record(commandBuffer, colorImage, colorView, swapchain_.extent(), frameIndex_);
+    forwardPass_->transitionToPresent(commandBuffer, colorImage);
 }
 
 void Renderer::cursorPositionCallback(GLFWwindow* window, const double cursorX, const double cursorY) {
@@ -306,6 +317,9 @@ void Renderer::cursorPositionCallback(GLFWwindow* window, const double cursorX, 
 void Renderer::mouseButtonCallback(GLFWwindow* window, const int button, const int action, const int modifiers) {
     static_cast<void>(modifiers);
     if (auto* renderer = static_cast<Renderer*>(glfwGetWindowUserPointer(window)); renderer != nullptr) {
+        if (action == GLFW_PRESS && renderer->editorUi_ && renderer->editorUi_->wantsMouseCapture()) {
+            return;
+        }
         renderer->camera_.onMouseButton(window, button, action);
     }
 }
@@ -337,9 +351,11 @@ void Renderer::waitForFrame(const FrameContext& frame) const {
 void Renderer::recreateSwapchain() {
     swapchain_.recreate();
     if (glfwWindowShouldClose(window_) == GLFW_FALSE) {
+        editorUi_.reset();
         destroyPresentSemaphores();
         createPresentSemaphores();
         forwardPass_->resize(swapchain_.extent());
+        editorUi_ = std::make_unique<editor::EditorUi>(device_, swapchain_, window_);
     }
 }
 

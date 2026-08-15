@@ -2,7 +2,7 @@
 
 ## 当前任务
 
-M2.3b 双缓冲 GpuState、异步 pipeline 创建和帧边界 swap 已实现并验证。下一项是 M2.4：ImGui 编辑器外壳、可见 Compile 按钮、编译状态和 Console 面板。M1、M2.1-M2.3b 已完成。
+M2.4 ImGui 编辑器外壳、Compile 状态和 Console 已实现并完成自动/截图验证。下一项是 M2.5：100 次 reload 压力测试、人工 Compile/错误 Console 验收和 M2 milestone 收口。M1、M2.1-M2.4 已完成。
 
 ## 不可破坏的不变式
 
@@ -18,7 +18,7 @@ M2.3b 双缓冲 GpuState、异步 pipeline 创建和帧边界 swap 已实现并�
 1. 阅读 `/doc/implementation_plan.md`、`/doc/progress.md`、本文件。
 2. 检查 `git status --short --branch` 和最近提交，绝不覆盖未知的用户改动。
 3. 从 `progress.md` 第一条非 DONE 项继续。
-4. M2.3b 收口后从 M2.4 继续；每个已验证功能点更新 `/doc`、提交并推送。
+4. M2.4 收口后从 M2.5 继续；每个已验证功能点更新 `/doc`、提交并推送。
 
 ## 当前环境
 
@@ -39,6 +39,7 @@ M2.3b 双缓冲 GpuState、异步 pipeline 创建和帧边界 swap 已实现并�
 - M1.6 已完成 baseColor texture/factor、白色 fallback、descriptor 和 transfer upload；目视验收通过，详见 `doc/m1_acceptance.md`。
 - M1.7 已将相机输入提前到 Vulkan 阻塞点之前，使用 GLFW 回调累积位移、拖动捕获/raw mouse 和约 20ms 半衰期平滑；构建、CTest、Vulkan smoke 与用户手感验收均通过，详见 `doc/input_responsiveness.md`。
 - M2.3b reload smoke 连续触发 10 代只应用 generation 10；generation 11 语法错误保持 live generation 10，详见 `doc/m2_gpu_state.md`。
+- M2.4 基础 UI 与 reload+UI smoke 均退出码 0；DamagedHelmet UI 截图目视通过，详见 `doc/m2_editor_ui.md`。
 
 ## 已完成的 Vulkan 约束
 
@@ -66,6 +67,8 @@ M2.3b 双缓冲 GpuState、异步 pipeline 创建和帧边界 swap 已实现并�
 - `ForwardPass` 持有 `liveGpuState_`/`pendingGpuState_`；帧边界先安全排队旧 live 的延迟销毁，再原子 swap。不要把任何可能失败的 Vulkan 创建调用移入 swap 区间。
 - `GpuState` 当前拥有 pipeline layout + pipeline；M3 必须把随反射变化的 descriptor layout/pool/set/UBO 扩入同一原子状态，不可拆开切换。
 - 用户 fragment 位于 `assets/shaders/user/default.frag`，F5 触发异步编译；材质 descriptor 已从 set 0 迁到固定 set 1，set 0 当前为空布局占位。
+- `editor::EditorUi` 使用 ImGui core + GLFW backend，但 Vulkan draw 由项目内 volk-compatible renderer 完成；不要重新接入 vcpkg 预编译 `ImGui_ImplVulkan_*`，其 prototype ABI 与当前 volk 配置冲突。
+- UI 在 ForwardPass 后以 LOAD dynamic rendering 合成；`ForwardPass::transitionToPresent()` 必须保持在 UI record 之后。
 - `core::Log` 已能把 validation 与编译错误送往未来 ConsolePanel，也能在 smoke test 中通过 stderr 留证。
 - 固定 shader 位于 `assets/shaders/engine/`，只服务于 M1；M2 的用户 fragment shader 编译链不得复用构建期 glslc 状态。
 

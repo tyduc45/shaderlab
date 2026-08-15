@@ -24,7 +24,8 @@
 | 2026-08-15 | M2.3a | DONE | 异步编译调度、文件读取与过期 generation 丢弃 | 2 worker 并发 10 次请求，仅第 10 代成功结果可消费；CTest 1/1 |
 | 2026-08-15 | M1.7 交互改进 | DONE | 阻塞前相机更新、回调增量采样、raw mouse 与轻量平滑 | Debug `/W4 /WX`、CTest 1/1、Vulkan smoke 退出码 0；用户手感验收通过 |
 | 2026-08-15 | M2.3b | DONE | 双缓冲 GpuState、异步 pipeline 创建与帧边界原子 swap | 10 代仅应用 generation 10；generation 11 语法失败保持 live=10；Vulkan smoke 退出码 0 |
-| 2026-08-15 | M2.4 | DOING | ImGui 编辑器外壳、Compile 按钮与 Console 面板 | 待实现 |
+| 2026-08-15 | M2.4 | DONE | ImGui 编辑器外壳、Compile 状态与 Console 面板 | dynamic-rendering UI smoke + reload smoke 退出码 0；截图目视通过 |
+| 2026-08-15 | M2.5 | DOING | 100 次重载压力验证与 M2 milestone 收口 | 待执行 |
 | 2026-08-15 | M3 | TODO | 反射参数系统 | 未开始 |
 | 2026-08-15 | M4 | TODO | Include 依赖图 | 未开始 |
 | 2026-08-15 | M5 | TODO | 多 Material 与 PSO 复用 | 未开始 |
@@ -60,6 +61,9 @@
 - M2.3b 新增 `material::GpuState`，CPU 编译成功后在独立 GPU worker 创建候选 pipeline group；主线程只在帧边界交换 live/pending，旧 live 进入 3 帧 DeletionQueue。
 - 固定 descriptor ABI 向规格对齐：set 0 预留全局布局，baseColor material descriptor 使用 set 1；新增可由 F5 手动编译的 `assets/shaders/user/default.frag`。
 - shader reload Vulkan smoke 连续触发 10 次只应用最后一代；随后语法错误准确报告第 2 行且 live generation 保持 10。详见 `doc/m2_gpu_state.md`。
+- M2.3b 已以提交 `dc787d2` 推送到 `origin/main`。
+- M2.4 新增 ImGui Shader/Console 面板和 Compile 按钮；场景与 UI 使用两个连续 dynamic-rendering pass，present barrier 延后到 UI 合成结束。
+- vcpkg 预编译 Vulkan backend 与 volk/no-prototypes 发生 ABI 冲突，最终保留 ImGui GLFW backend 并实现精简 volk-compatible UI renderer；详细原因与视觉证据见 `doc/m2_editor_ui.md`。
 
 ## 验证命令
 

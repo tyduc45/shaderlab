@@ -82,3 +82,21 @@ Debug `/W4 /WX` 构建、CTest 1/1 和 4 帧 Vulkan smoke test 均通过；用�
 ### 验证
 
 实际 Vulkan smoke 连续触发 10 代只应用第 10 代；语法错误的第 11 代没有创建 pending、没有替换 live。继续渲染和延迟销毁期间 validation 无非预期错误。
+
+## 2026-08-15 — ImGui Vulkan 绘制使用项目内 volk-compatible backend
+
+### 背景
+
+vcpkg 的 ImGui static library 将官方 Vulkan backend 以直接 Vulkan prototype 编译；ShaderLab 则定义 `VK_NO_PROTOTYPES` 并由 volk 暴露同名函数指针。实际链接后官方 backend 在 `ImGui_ImplVulkan_Init` 发生访问冲突，显式调用其 load-functions API 也不能改变库本身已编译的调用 ABI。
+
+### 决策
+
+- 不改变 ShaderLab 的 volk-only loader 约束，也不引入本地 `vulkan-1.dll`。
+- 继续使用 vcpkg ImGui core/docking 与 GLFW backend。
+- 项目内实现只满足当前编辑器需求的 Vulkan renderer：font atlas、每帧 VMA buffer、descriptor、alpha blend pipeline、scissor 和 indexed draw。
+- UI 与场景一样只使用 synchronization2 和 dynamic rendering；不引入 render pass/framebuffer。
+- UI 纹理 registry 留到 M3 Inspector 需要缩略图时扩展，M2 不提前实现泛化层。
+
+### 验证
+
+基础 UI smoke 和 reload+UI smoke 均退出码 0；DamagedHelmet 截图确认两个面板、字体、混合和场景合成正确。

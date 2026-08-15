@@ -47,6 +47,8 @@ add_executable(shaderlab WIN32
     src/shader/ShaderReloadController.h
     src/material/GpuState.cpp
     src/material/GpuState.h
+    src/editor/EditorUi.cpp
+    src/editor/EditorUi.h
     src/rhi/DeletionQueue.cpp
     src/rhi/DeletionQueue.h
     src/rhi/Device.cpp
@@ -71,6 +73,8 @@ set(SHADER_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/shaders")
 set(FIXED_SHADER_SOURCES
     assets/shaders/engine/fixed.vert
     assets/shaders/engine/fixed.frag
+    assets/shaders/engine/imgui.vert
+    assets/shaders/engine/imgui.frag
 )
 set(FIXED_SHADER_OUTPUTS)
 foreach(SHADER_SOURCE IN LISTS FIXED_SHADER_SOURCES)

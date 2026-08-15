@@ -180,7 +180,9 @@ void ForwardPass::record(const VkCommandBuffer commandBuffer, const VkImage colo
         vkCmdDrawIndexed(commandBuffer, submesh.indexCount, 1, submesh.firstIndex, 0, 0);
     }
     vkCmdEndRendering(commandBuffer);
+}
 
+void ForwardPass::transitionToPresent(const VkCommandBuffer commandBuffer, const VkImage colorImage) const {
     VkImageMemoryBarrier2 toPresent{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
     toPresent.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
     toPresent.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
@@ -188,7 +190,10 @@ void ForwardPass::record(const VkCommandBuffer commandBuffer, const VkImage colo
     toPresent.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     toPresent.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     toPresent.image = colorImage;
-    toPresent.subresourceRange = barriers[0].subresourceRange;
+    toPresent.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    toPresent.subresourceRange.levelCount = 1;
+    toPresent.subresourceRange.layerCount = 1;
+    VkDependencyInfo dependency{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
     dependency.imageMemoryBarrierCount = 1;
     dependency.pImageMemoryBarriers = &toPresent;
     vkCmdPipelineBarrier2(commandBuffer, &dependency);

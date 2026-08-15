@@ -35,6 +35,7 @@ public:
     void resize(VkExtent2D extent);
     void record(VkCommandBuffer commandBuffer, VkImage colorImage, VkImageView colorView,
                 VkExtent2D extent, const glm::mat4& viewProjection) const;
+    void transitionToPresent(VkCommandBuffer commandBuffer, VkImage colorImage) const;
     [[nodiscard]] std::unique_ptr<material::GpuState> buildGpuState(
         std::span<const std::uint32_t> fragmentSpirv, std::uint64_t generation) const;
     void stageGpuState(std::unique_ptr<material::GpuState> state);

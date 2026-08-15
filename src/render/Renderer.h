@@ -16,6 +16,10 @@
 
 struct GLFWwindow;
 
+namespace shaderlab::editor {
+class EditorUi;
+}
+
 namespace shaderlab::rhi {
 class Device;
 class Swapchain;
@@ -76,6 +80,7 @@ private:
     rhi::Swapchain& swapchain_;
     GLFWwindow* window_ = nullptr;
     std::unique_ptr<ForwardPass> forwardPass_;
+    std::unique_ptr<editor::EditorUi> editorUi_;
     std::filesystem::path userFragmentPath_;
     scene::OrbitCamera camera_;
     std::array<FrameContext, FramesInFlight> frames_{};
