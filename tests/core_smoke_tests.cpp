@@ -1,6 +1,8 @@
 #include "core/JobSystem.h"
 #include "core/Log.h"
 #include "rhi/DeletionQueue.h"
+#include "shader/ShaderCompiler.h"
+#include "shader/GenerationCounter.h"
 
 #include <atomic>
 #include <cstdlib>
@@ -41,5 +43,36 @@ int main() {
     while (auto result = results.tryPop()) {
         sum += *result;
     }
-    return executed.load(std::memory_order_relaxed) == 64 && sum == 2080 ? EXIT_SUCCESS : EXIT_FAILURE;
+    if (executed.load(std::memory_order_relaxed) != 64 || sum != 2080) {
+        return EXIT_FAILURE;
+    }
+
+    shaderlab::shader::ShaderCompiler compiler;
+    const shaderlab::shader::CompileRequest validRequest{
+        "valid.frag",
+        "#version 460\nlayout(location=0) out vec4 color; void main(){ color=vec4(1.0); }",
+        41,
+    };
+    const auto valid = compiler.compileFragment(validRequest);
+    if (!valid.success || valid.generation != 41 || valid.spirv.empty()) {
+        return EXIT_FAILURE;
+    }
+    const shaderlab::shader::CompileRequest invalidRequest{
+        "broken.frag",
+        "#version 460\nlayout(location=0) out vec4 color; void main(){ color=vec4(; }",
+        42,
+    };
+    const auto invalid = compiler.compileFragment(invalidRequest);
+    if (invalid.success || invalid.generation != 42 || invalid.errors.empty() || invalid.errors.front().line != 2) {
+        return EXIT_FAILURE;
+    }
+    shaderlab::shader::GenerationCounter generations;
+    std::uint64_t lastGeneration = 0;
+    for (int request = 0; request < 10; ++request) {
+        lastGeneration = generations.begin();
+    }
+    if (generations.isCurrent(lastGeneration - 1) || !generations.isCurrent(lastGeneration)) {
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
 }

@@ -39,6 +39,10 @@ add_executable(shaderlab WIN32
     src/core/Log.h
     src/core/JobSystem.cpp
     src/core/JobSystem.h
+    src/shader/ShaderAsset.h
+    src/shader/GenerationCounter.h
+    src/shader/ShaderCompiler.cpp
+    src/shader/ShaderCompiler.h
     src/rhi/DeletionQueue.cpp
     src/rhi/DeletionQueue.h
     src/rhi/Device.cpp
@@ -138,8 +142,13 @@ if(BUILD_TESTING)
         src/core/JobSystem.h
         src/rhi/DeletionQueue.cpp
         src/rhi/DeletionQueue.h
+        src/shader/ShaderCompiler.cpp
+        src/shader/ShaderCompiler.h
+        src/shader/ShaderAsset.h
+        src/shader/GenerationCounter.h
     )
     target_compile_options(shaderlab_core_tests PRIVATE /W4 /WX /permissive- /Zc:__cplusplus /utf-8)
     target_include_directories(shaderlab_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(shaderlab_core_tests PRIVATE unofficial::shaderc::shaderc)
     add_test(NAME shaderlab_core_tests COMMAND shaderlab_core_tests)
 endif()
