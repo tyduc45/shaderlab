@@ -2,7 +2,7 @@
 
 ## 当前任务
 
-M2.3b：实现双缓冲 GpuState、pipeline 创建与帧边界 swap。M1、M2.1-M2.3a 已完成。
+M1.7 交互响应改进已通过用户人工拖动验收，正在收口提交并推送。完成后恢复 M2.3b（双缓冲 GpuState、pipeline 创建与帧边界 swap）。M1、M2.1-M2.3a 已完成。
 
 ## 不可破坏的不变式
 
@@ -18,7 +18,7 @@ M2.3b：实现双缓冲 GpuState、pipeline 创建与帧边界 swap。M1、M2.1-
 1. 阅读 `/doc/implementation_plan.md`、`/doc/progress.md`、本文件。
 2. 检查 `git status --short --branch` 和最近提交，绝不覆盖未知的用户改动。
 3. 从 `progress.md` 第一条非 DONE 项继续。
-4. 完成功能点后运行对应验证，更新 `/doc`，提交并立即推送当前分支。
+4. M1.7 已获用户验收和推送授权；完成收口后从 M2.3b 继续。之后的功能点继续按用户当时的明确指令处理。
 
 ## 当前环境
 
@@ -37,6 +37,7 @@ M2.3b：实现双缓冲 GpuState、pipeline 创建与帧边界 swap。M1、M2.1-
 - M1.4 smoke test 已实际提交固定 ForwardPass 的 indexed cube，退出码 0，validation VUID 0。
 - M1.5 已用 Khronos DamagedHelmet 验证 glTF geometry：14556 vertices、46356 indices、1 submesh，4 帧退出码 0，validation VUID 0。
 - M1.6 已完成 baseColor texture/factor、白色 fallback、descriptor 和 transfer upload；目视验收通过，详见 `doc/m1_acceptance.md`。
+- M1.7 已将相机输入提前到 Vulkan 阻塞点之前，使用 GLFW 回调累积位移、拖动捕获/raw mouse 和约 20ms 半衰期平滑；构建、CTest、Vulkan smoke 与用户手感验收均通过，详见 `doc/input_responsiveness.md`。
 
 ## 已完成的 Vulkan 约束
 

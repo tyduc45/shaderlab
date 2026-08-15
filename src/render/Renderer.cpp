@@ -33,17 +33,28 @@ Renderer::Renderer(rhi::Device& device, rhi::Swapchain& swapchain, GLFWwindow* w
     createPresentSemaphores();
     forwardPass_ = std::make_unique<ForwardPass>(device_, swapchain_, modelPath);
     camera_.frame(forwardPass_->bounds());
+    glfwSetWindowUserPointer(window_, this);
+    glfwSetCursorPosCallback(window_, cursorPositionCallback);
+    glfwSetMouseButtonCallback(window_, mouseButtonCallback);
     lastFrameTime_ = glfwGetTime();
 }
 
 Renderer::~Renderer() {
     device_.waitIdle();
+    camera_.releaseInput(window_);
+    glfwSetCursorPosCallback(window_, nullptr);
+    glfwSetMouseButtonCallback(window_, nullptr);
+    glfwSetWindowUserPointer(window_, nullptr);
     forwardPass_.reset();
     destroyPresentSemaphores();
     destroyFrameContexts();
 }
 
 void Renderer::drawFrame() {
+    const double now = glfwGetTime();
+    camera_.update(window_, static_cast<float>(now - lastFrameTime_));
+    lastFrameTime_ = now;
+
     device_.deletionQueue().flush(frameNumber_);
     if (swapchain_.framebufferExtentChanged()) {
         recreateSwapchain();
@@ -176,11 +187,21 @@ void Renderer::destroyPresentSemaphores() noexcept {
 }
 
 void Renderer::recordFrame(const VkCommandBuffer commandBuffer, const std::uint32_t imageIndex) {
-    const double now = glfwGetTime();
-    camera_.update(window_, static_cast<float>(now - lastFrameTime_));
-    lastFrameTime_ = now;
     forwardPass_->record(commandBuffer, swapchain_.image(imageIndex), swapchain_.imageView(imageIndex),
                          swapchain_.extent(), camera_.viewProjection(swapchain_.extent()));
+}
+
+void Renderer::cursorPositionCallback(GLFWwindow* window, const double cursorX, const double cursorY) {
+    if (auto* renderer = static_cast<Renderer*>(glfwGetWindowUserPointer(window)); renderer != nullptr) {
+        renderer->camera_.onCursorPosition(cursorX, cursorY);
+    }
+}
+
+void Renderer::mouseButtonCallback(GLFWwindow* window, const int button, const int action, const int modifiers) {
+    static_cast<void>(modifiers);
+    if (auto* renderer = static_cast<Renderer*>(glfwGetWindowUserPointer(window)); renderer != nullptr) {
+        renderer->camera_.onMouseButton(window, button, action);
+    }
 }
 
 void Renderer::waitForFrame(const FrameContext& frame) const {

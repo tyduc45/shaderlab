@@ -22,6 +22,7 @@
 | 2026-08-15 | M2.1 | DONE | DeletionQueue、JobSystem 与线程安全 ResultQueue | 单测覆盖 3 帧延迟和 64 个并发结果；CTest 1/1；DamagedHelmet integration smoke 退出码 0 |
 | 2026-08-15 | M2.2 | DONE | ShaderCompiler、generation counter 与编译结果模型 | shaderc Vulkan 1.4/SPIR-V 1.6；成功/语法错误与行号、10 次 generation 测试；CTest 1/1 |
 | 2026-08-15 | M2.3a | DONE | 异步编译调度、文件读取与过期 generation 丢弃 | 2 worker 并发 10 次请求，仅第 10 代成功结果可消费；CTest 1/1 |
+| 2026-08-15 | M1.7 交互改进 | DONE | 阻塞前相机更新、回调增量采样、raw mouse 与轻量平滑 | Debug `/W4 /WX`、CTest 1/1、Vulkan smoke 退出码 0；用户手感验收通过 |
 | 2026-08-15 | M2.3b | DOING | 双缓冲 GpuState、pipeline 创建与帧边界 swap | 正在实现 |
 | 2026-08-15 | M3 | TODO | 反射参数系统 | 未开始 |
 | 2026-08-15 | M4 | TODO | Include 依赖图 | 未开始 |
@@ -51,6 +52,9 @@
 - M2.1 新增可配置帧延迟的线程安全 DeletionQueue、异常隔离线程池和 `ResultQueue<T>`；Renderer 每帧推进绝对帧号并 flush，Device 最终 idle 后兜底 flushAll。
 - M2.2 新增 shaderc 编译结果模型，固定 Vulkan 1.4/SPIR-V 1.6、Debug info/Release optimize、warning-as-error，并从 diagnostics 提取 path/line/column；generation 原样随结果返回。
 - M2.3a 新增 `ShaderReloadController`：文件 I/O 与 shaderc 均在 worker，重复触发立即递增 generation，主线程 `pollCurrent()` 静默丢弃所有过期结果。
+- 插入处理 M1 交互卡顿：确认鼠标没有带动资源或 shader 系统；将相机更新移到 Vulkan 阻塞点之前，改为 GLFW 回调累积位移，拖动时捕获光标并在可用时启用 raw mouse，增加约 20ms 半衰期的时间相关平滑。
+- 交互改进的实现与自动验证已完成，详细记录见 `doc/input_responsiveness.md`；按用户最新指令，暂不提交/推送，等待人工验收成功。
+- 用户确认 M1.7 手感验收成功，允许提交推送，并要求按当前记录继续 M2.3b。
 
 ## 验证命令
 

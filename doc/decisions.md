@@ -46,3 +46,21 @@ M1 固定 shader 只读取 glTF `baseColorTexture × baseColorFactor`，再施�
 ### 验证
 
 DamagedHelmet baseColor 纹理与 UV 在 1280×720 screenshot layer 输出中目视正确，validation VUID 为 0。
+
+## 2026-08-15 — 输入采样与 Vulkan 阻塞解耦
+
+### 背景
+
+轨道相机原先在 `recordFrame()` 中轮询鼠标并立即应用整数坐标差。该位置晚于 frame timeline wait 和无限超时的 `vkAcquireNextImageKHR`，因此鼠标响应延迟会继承 GPU/WSI 帧节奏；每帧单次位置采样也没有显式保留事件轮询期间的全部中间增量。
+
+### 决策
+
+- 保留 Vulkan 正确性所需的 frame-slot timeline wait 和 swapchain acquire。
+- 每帧在任何潜在阻塞点之前消费相机输入。
+- GLFW cursor callback 只负责累积位移；渲染帧统一消费，避免回调直接修改渲染状态。
+- 左键拖动期间捕获光标，并在平台支持时启用 raw mouse motion。
+- 使用按 delta time 计算的轻量指数积压滤波；积压逐步归零，以免为平滑永久丢弃输入位移。
+
+### 验证
+
+Debug `/W4 /WX` 构建、CTest 1/1 和 4 帧 Vulkan smoke test 均通过；用户随后确认鼠标手感验收成功并授权推送。

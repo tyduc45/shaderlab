@@ -49,6 +49,8 @@ private:
     void recordFrame(VkCommandBuffer commandBuffer, std::uint32_t imageIndex);
     void waitForFrame(const FrameContext& frame) const;
     void recreateSwapchain();
+    static void cursorPositionCallback(GLFWwindow* window, double cursorX, double cursorY);
+    static void mouseButtonCallback(GLFWwindow* window, int button, int action, int modifiers);
 
     rhi::Device& device_;
     rhi::Swapchain& swapchain_;

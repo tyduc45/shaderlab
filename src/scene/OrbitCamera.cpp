@@ -17,23 +17,68 @@ void OrbitCamera::frame(const Bounds& bounds) {
     distance_ = std::max(bounds.radius() * 2.4F, 0.5F);
 }
 
-void OrbitCamera::update(GLFWwindow* window, const float deltaSeconds) {
-    double cursorX = 0.0;
-    double cursorY = 0.0;
-    glfwGetCursorPos(window, &cursorX, &cursorY);
+void OrbitCamera::onCursorPosition(const double cursorX, const double cursorY) {
     const glm::dvec2 cursor(cursorX, cursorY);
-    const bool pressed = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
-    if (pressed && dragging_) {
-        const glm::dvec2 delta = cursor - previousCursor_;
-        yaw_ -= static_cast<float>(delta.x) * 0.006F;
-        pitch_ = std::clamp(pitch_ - static_cast<float>(delta.y) * 0.006F, -1.45F, 1.45F);
+    if (dragging_ && hasCursorSample_) {
+        pendingCursorDelta_ += cursor - previousCursor_;
     }
-    dragging_ = pressed;
     previousCursor_ = cursor;
+    hasCursorSample_ = true;
+}
+
+void OrbitCamera::onMouseButton(GLFWwindow* window, const int button, const int action) {
+    if (button != GLFW_MOUSE_BUTTON_LEFT || window == nullptr) {
+        return;
+    }
+
+    if (action == GLFW_PRESS && !dragging_) {
+        double cursorX = 0.0;
+        double cursorY = 0.0;
+        glfwGetCursorPos(window, &cursorX, &cursorY);
+        previousCursor_ = glm::dvec2(cursorX, cursorY);
+        hasCursorSample_ = true;
+        dragging_ = true;
+
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        if (glfwRawMouseMotionSupported() == GLFW_TRUE) {
+            glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+        }
+    } else if (action == GLFW_RELEASE) {
+        releaseInput(window);
+    }
+}
+
+void OrbitCamera::releaseInput(GLFWwindow* window) {
+    dragging_ = false;
+    hasCursorSample_ = false;
+    if (window == nullptr) {
+        return;
+    }
+    if (glfwRawMouseMotionSupported() == GLFW_TRUE) {
+        glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_FALSE);
+    }
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+}
+
+void OrbitCamera::update(GLFWwindow* window, const float deltaSeconds) {
+    const float safeDeltaSeconds = std::clamp(deltaSeconds, 0.0F, 0.1F);
+    cursorDeltaBacklog_ += pendingCursorDelta_;
+    pendingCursorDelta_ = {};
+
+    constexpr double smoothingRate = 35.0;
+    const double smoothingFraction = 1.0 - std::exp(-smoothingRate * static_cast<double>(safeDeltaSeconds));
+    const glm::dvec2 smoothedDelta = cursorDeltaBacklog_ * smoothingFraction;
+    cursorDeltaBacklog_ -= smoothedDelta;
+    if (glm::dot(cursorDeltaBacklog_, cursorDeltaBacklog_) < 0.000001) {
+        cursorDeltaBacklog_ = {};
+    }
+
+    yaw_ -= static_cast<float>(smoothedDelta.x) * 0.006F;
+    pitch_ = std::clamp(pitch_ - static_cast<float>(smoothedDelta.y) * 0.006F, -1.45F, 1.45F);
 
     const float zoomDirection = (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS ? -1.0F : 0.0F) +
                                 (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS ? 1.0F : 0.0F);
-    distance_ = std::max(0.05F, distance_ * std::exp(zoomDirection * deltaSeconds * 1.8F));
+    distance_ = std::max(0.05F, distance_ * std::exp(zoomDirection * safeDeltaSeconds * 1.8F));
 }
 
 glm::mat4 OrbitCamera::viewProjection(const VkExtent2D extent) const {
