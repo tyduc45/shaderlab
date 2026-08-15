@@ -28,11 +28,10 @@ public:
     void waitIdle();
 
 private:
-    core::JobSystem jobs_;
     core::ResultQueue<CompileResult> results_;
+    core::JobSystem jobs_;
     GenerationCounter generations_;
     bool inFlight_ = false;
 };
 
 } // namespace shaderlab::shader
-

@@ -60,7 +60,7 @@ M2.3b：实现双缓冲 GpuState、pipeline 创建与帧边界 swap。M1、M2.1-
 - `shader::ShaderCompiler` 只产出 CPU SPIR-V 与结构化 diagnostics，不修改任何 live GPU 状态；`CompileResult::generation` 必须在主线程消费时与当前 generation 比较。
 - `shader::GenerationCounter` 已单测连续 10 次触发只接受第 10 代；M2.3 将它嵌入 material/runtime compile controller。
 - `ShaderReloadController::requestFile/requestSource` 已完成 worker 调度，`pollCurrent()` 是唯一主线程消费入口；M2.3b 不应绕过它直接读取 `ResultQueue`。
-- Controller 析构顺序保证 `ResultQueue` 比 `JobSystem` 后销毁（成员声明中 JobSystem 在前、析构逆序时需特别注意）。当前 controller 使用前必须先显式 `waitIdle()` 或确保 JobSystem 析构会 join 完成；如重排成员必须重新审计生命周期。
+- Controller 成员声明为 `ResultQueue` 在前、`JobSystem` 在后，C++ 逆序析构使 JobSystem 先 join 全部 worker，再销毁结果队列；如重排成员必须重新审计生命周期。
 - `ForwardPass` 当前固定 build-time shaders 与单份 startup pipeline；M2 将用户 fragment 编译结果组织为双缓冲 `GpuState`，失败不能碰 live 状态。
 - `core::Log` 已能把 validation 与编译错误送往未来 ConsolePanel，也能在 smoke test 中通过 stderr 留证。
 - 固定 shader 位于 `assets/shaders/engine/`，只服务于 M1；M2 的用户 fragment shader 编译链不得复用构建期 glslc 状态。
