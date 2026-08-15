@@ -36,6 +36,8 @@ add_executable(shaderlab WIN32
     src/main.cpp
     src/core/Log.cpp
     src/core/Log.h
+    src/rhi/Device.cpp
+    src/rhi/Device.h
 )
 
 target_compile_definitions(shaderlab PRIVATE

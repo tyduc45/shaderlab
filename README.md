@@ -19,6 +19,14 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
+For a non-interactive Vulkan initialization check (hidden window, exits after device creation):
+
+```powershell
+$env:SHADERLAB_SMOKE_TEST = '1'
+.\build\Debug\shaderlab.exe
+Remove-Item Env:SHADERLAB_SMOKE_TEST
+```
+
 Dependencies are pinned through the `builtin-baseline` in `vcpkg.json`. Build outputs and the manifest-mode installed tree remain local and are ignored by Git.
 
 ## Documentation

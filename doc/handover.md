@@ -2,7 +2,7 @@
 
 ## 当前任务
 
-M1.2：实现 Vulkan instance/device、debug utils、VMA 与 timeline semaphore。M1.1 工程骨架已完成。
+M1.3：实现 swapchain、dynamic rendering 与 synchronization2 帧循环。M1.1、M1.2 已完成。
 
 ## 不可破坏的不变式
 
@@ -32,4 +32,12 @@ M1.2：实现 Vulkan instance/device、debug utils、VMA 与 timeline semaphore�
 - `cmake --preset windows-msvc`：成功。
 - `cmake --build --preset debug`：成功，`/W4 /WX`。
 - `ctest --preset debug`：1/1 通过。
+- `SHADERLAB_SMOKE_TEST=1` 运行 Debug 应用：退出码 0，已验证本机 Vulkan 1.4 device、surface、timeline semaphore 与 VMA 初始化/清理。
+
+## 已完成的 Vulkan 约束
+
+- instance API 固定为 Vulkan 1.4，不满足即给出明确错误。
+- 选卡时检查 swapchain、present queue 和 Vulkan 1.2/1.3/1.4 所需特性。
+- Debug validation 消息进入 `core::Log`，可在后续 ConsolePanel 直接接收。
+- VMA 使用动态 Vulkan 函数表；allocator 生命周期受 `rhi::Device` 管理。
 
