@@ -49,6 +49,10 @@ add_executable(shaderlab WIN32
     src/render/Renderer.h
     src/render/passes/ForwardPass.cpp
     src/render/passes/ForwardPass.h
+    src/scene/ModelAsset.cpp
+    src/scene/ModelAsset.h
+    src/scene/OrbitCamera.cpp
+    src/scene/OrbitCamera.h
 )
 
 set(SHADER_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/shaders")
@@ -113,6 +117,7 @@ target_link_libraries(shaderlab PRIVATE
     imguizmo::imguizmo
     unofficial::shaderc::shaderc
     unofficial::spirv-reflect
+    Shell32
 )
 
 set_target_properties(shaderlab PROPERTIES

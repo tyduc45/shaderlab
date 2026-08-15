@@ -27,6 +27,14 @@ $env:SHADERLAB_SMOKE_TEST = '1'
 Remove-Item Env:SHADERLAB_SMOKE_TEST
 ```
 
+Pass a `.gltf` or `.glb` file as the first argument to load it. With no argument, ShaderLab looks for `assets/models/DamagedHelmet/DamagedHelmet.gltf` and otherwise uses a built-in cube:
+
+```powershell
+.\build\Debug\shaderlab.exe 'C:\models\DamagedHelmet\DamagedHelmet.gltf'
+```
+
+M1 camera controls: hold the left mouse button to orbit; use `W`/`S` to dolly in/out.
+
 Dependencies are pinned through the `builtin-baseline` in `vcpkg.json`. Build outputs and the manifest-mode installed tree remain local and are ignored by Git.
 
 `SHADERLAB_ASAN=ON` is available as a CMake cache option for MSVC AddressSanitizer diagnostics.

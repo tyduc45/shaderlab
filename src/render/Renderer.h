@@ -1,9 +1,12 @@
 #pragma once
 
+#include "scene/OrbitCamera.h"
+
 #include <volk.h>
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <vector>
 
@@ -22,7 +25,8 @@ class Renderer final {
 public:
     static constexpr std::uint32_t FramesInFlight = 2;
 
-    Renderer(rhi::Device& device, rhi::Swapchain& swapchain, GLFWwindow* window);
+    Renderer(rhi::Device& device, rhi::Swapchain& swapchain, GLFWwindow* window,
+             const std::filesystem::path& modelPath);
     ~Renderer();
 
     Renderer(const Renderer&) = delete;
@@ -42,7 +46,7 @@ private:
     void destroyFrameContexts() noexcept;
     void createPresentSemaphores();
     void destroyPresentSemaphores() noexcept;
-    void recordFrame(VkCommandBuffer commandBuffer, std::uint32_t imageIndex) const;
+    void recordFrame(VkCommandBuffer commandBuffer, std::uint32_t imageIndex);
     void waitForFrame(const FrameContext& frame) const;
     void recreateSwapchain();
 
@@ -50,10 +54,12 @@ private:
     rhi::Swapchain& swapchain_;
     GLFWwindow* window_ = nullptr;
     std::unique_ptr<ForwardPass> forwardPass_;
+    scene::OrbitCamera camera_;
     std::array<FrameContext, FramesInFlight> frames_{};
     std::vector<VkSemaphore> presentReady_;
     std::uint32_t frameIndex_ = 0;
     std::uint64_t nextTimelineValue_ = 1;
+    double lastFrameTime_ = 0.0;
 };
 
 } // namespace shaderlab::render

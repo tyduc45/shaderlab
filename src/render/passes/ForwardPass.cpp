@@ -3,10 +3,7 @@
 #include "rhi/Device.h"
 #include "rhi/Swapchain.h"
 
-#include <glm/ext/matrix_clip_space.hpp>
-#include <glm/ext/matrix_transform.hpp>
 #include <glm/mat4x4.hpp>
-#include <glm/vec3.hpp>
 
 #include <array>
 #include <cstddef>
@@ -19,23 +16,6 @@
 
 namespace shaderlab::render {
 namespace {
-
-struct Vertex {
-    glm::vec3 position;
-    glm::vec3 color;
-};
-
-constexpr std::array vertices{
-    Vertex{{-1.0F, -1.0F, -1.0F}, {0.9F, 0.2F, 0.2F}}, Vertex{{1.0F, -1.0F, -1.0F}, {0.2F, 0.9F, 0.2F}},
-    Vertex{{1.0F, 1.0F, -1.0F}, {0.2F, 0.2F, 0.9F}}, Vertex{{-1.0F, 1.0F, -1.0F}, {0.9F, 0.9F, 0.2F}},
-    Vertex{{-1.0F, -1.0F, 1.0F}, {0.9F, 0.2F, 0.9F}}, Vertex{{1.0F, -1.0F, 1.0F}, {0.2F, 0.9F, 0.9F}},
-    Vertex{{1.0F, 1.0F, 1.0F}, {0.95F, 0.55F, 0.15F}}, Vertex{{-1.0F, 1.0F, 1.0F}, {0.8F, 0.8F, 0.9F}},
-};
-
-constexpr std::array<std::uint16_t, 36> indices{
-    0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4,
-    2, 3, 7, 2, 7, 6, 1, 2, 6, 1, 6, 5, 3, 0, 4, 3, 4, 7,
-};
 
 std::vector<std::uint32_t> readSpirv(const std::filesystem::path& path) {
     std::ifstream stream(path, std::ios::binary | std::ios::ate);
@@ -71,7 +51,10 @@ VkShaderModule createShaderModule(rhi::Device& device, const std::filesystem::pa
 
 } // namespace
 
-ForwardPass::ForwardPass(rhi::Device& device, const rhi::Swapchain& swapchain) : device_(device) {
+ForwardPass::ForwardPass(rhi::Device& device, const rhi::Swapchain& swapchain,
+                         const std::filesystem::path& modelPath)
+    : device_(device), model_(modelPath.empty() ? scene::ModelAsset::makeFallbackCube()
+                                                : scene::ModelAsset::load(modelPath)) {
     createGeometry();
     createDepth(swapchain.extent());
     createPipeline(swapchain.format());
@@ -87,7 +70,8 @@ void ForwardPass::resize(const VkExtent2D extent) {
 }
 
 void ForwardPass::record(const VkCommandBuffer commandBuffer, const VkImage colorImage,
-                         const VkImageView colorView, const VkExtent2D extent, const double timeSeconds) const {
+                         const VkImageView colorView, const VkExtent2D extent,
+                         const glm::mat4& viewProjection) const {
     std::array<VkImageMemoryBarrier2, 2> barriers{};
     barriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barriers[0].srcStageMask = VK_PIPELINE_STAGE_2_NONE;
@@ -143,16 +127,12 @@ void ForwardPass::record(const VkCommandBuffer commandBuffer, const VkImage colo
     const VkDeviceSize offset = 0;
     const VkBuffer vertexBuffer = vertexBuffer_.handle();
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &offset);
-    vkCmdBindIndexBuffer(commandBuffer, indexBuffer_.handle(), 0, VK_INDEX_TYPE_UINT16);
-
-    const float aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
-    const glm::mat4 projection = glm::perspective(glm::radians(55.0F), aspect, 0.1F, 100.0F);
-    const glm::mat4 view = glm::lookAt(glm::vec3(3.3F, 2.4F, 4.0F), glm::vec3(0.0F), glm::vec3(0.0F, 1.0F, 0.0F));
-    const glm::mat4 model = glm::rotate(glm::mat4(1.0F), static_cast<float>(timeSeconds) * 0.55F,
-                                       glm::normalize(glm::vec3(0.25F, 1.0F, 0.1F)));
-    const glm::mat4 mvp = projection * view * model;
-    vkCmdPushConstants(commandBuffer, pipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mvp), &mvp);
-    vkCmdDrawIndexed(commandBuffer, indexCount_, 1, 0, 0, 0);
+    vkCmdBindIndexBuffer(commandBuffer, indexBuffer_.handle(), 0, VK_INDEX_TYPE_UINT32);
+    vkCmdPushConstants(commandBuffer, pipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                       sizeof(viewProjection), &viewProjection);
+    for (const auto& submesh : model_.submeshes()) {
+        vkCmdDrawIndexed(commandBuffer, submesh.indexCount, 1, submesh.firstIndex, 0, 0);
+    }
     vkCmdEndRendering(commandBuffer);
 
     VkImageMemoryBarrier2 toPresent{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
@@ -171,13 +151,14 @@ void ForwardPass::record(const VkCommandBuffer commandBuffer, const VkImage colo
 void ForwardPass::createGeometry() {
     constexpr auto allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
                                      VMA_ALLOCATION_CREATE_MAPPED_BIT;
-    vertexBuffer_ = rhi::Buffer(device_, sizeof(vertices), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                                VMA_MEMORY_USAGE_AUTO, allocationFlags, "M1 cube vertices");
-    vertexBuffer_.write(vertices.data(), sizeof(vertices));
-    indexBuffer_ = rhi::Buffer(device_, sizeof(indices), VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                               VMA_MEMORY_USAGE_AUTO, allocationFlags, "M1 cube indices");
-    indexBuffer_.write(indices.data(), sizeof(indices));
-    indexCount_ = static_cast<std::uint32_t>(indices.size());
+    const auto vertexBytes = model_.vertices().size() * sizeof(scene::Vertex);
+    const auto indexBytes = model_.indices().size() * sizeof(std::uint32_t);
+    vertexBuffer_ = rhi::Buffer(device_, vertexBytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                                VMA_MEMORY_USAGE_AUTO, allocationFlags, "Model vertices");
+    vertexBuffer_.write(model_.vertices().data(), vertexBytes);
+    indexBuffer_ = rhi::Buffer(device_, indexBytes, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                               VMA_MEMORY_USAGE_AUTO, allocationFlags, "Model indices");
+    indexBuffer_.write(model_.indices().data(), indexBytes);
 }
 
 void ForwardPass::createPipeline(const VkFormat colorFormat) {
@@ -203,10 +184,11 @@ void ForwardPass::createPipeline(const VkFormat colorFormat) {
             VkPipelineShaderStageCreateInfo{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
                                             VK_SHADER_STAGE_FRAGMENT_BIT, fragment, "main", nullptr},
         };
-        const VkVertexInputBindingDescription binding{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX};
+        const VkVertexInputBindingDescription binding{0, sizeof(scene::Vertex), VK_VERTEX_INPUT_RATE_VERTEX};
         const std::array attributes{
-            VkVertexInputAttributeDescription{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position)},
-            VkVertexInputAttributeDescription{1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, color)},
+            VkVertexInputAttributeDescription{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(scene::Vertex, position)},
+            VkVertexInputAttributeDescription{1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(scene::Vertex, normal)},
+            VkVertexInputAttributeDescription{2, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(scene::Vertex, uv)},
         };
         VkPipelineVertexInputStateCreateInfo vertexInput{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
         vertexInput.vertexBindingDescriptionCount = 1;

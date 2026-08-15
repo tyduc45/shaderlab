@@ -2,7 +2,7 @@
 
 ## 当前任务
 
-M1.5：实现 glTF 2.0 模型加载与轨道相机。M1.1-M1.4 已完成。
+M1.6：实现 glTF 材质贴图、采样与 M1 最终验收。M1.1-M1.5 已完成。
 
 ## 不可破坏的不变式
 
@@ -35,6 +35,7 @@ M1.5：实现 glTF 2.0 模型加载与轨道相机。M1.1-M1.4 已完成。
 - `SHADERLAB_SMOKE_TEST=1` 运行 Debug 应用：退出码 0，已验证本机 Vulkan 1.4 device、surface、timeline semaphore 与 VMA 初始化/清理。
 - 当前 smoke test 会隐藏窗口连续提交/呈现 4 帧；使用 dynamic rendering 与 synchronization2，任何 error-level validation 回调都会使进程失败。
 - M1.4 smoke test 已实际提交固定 ForwardPass 的 indexed cube，退出码 0，validation VUID 0。
+- M1.5 已用 Khronos DamagedHelmet 验证 glTF geometry：14556 vertices、46356 indices、1 submesh，4 帧退出码 0，validation VUID 0。
 
 ## 已完成的 Vulkan 约束
 
@@ -53,6 +54,14 @@ M1.5：实现 glTF 2.0 模型加载与轨道相机。M1.1-M1.4 已完成。
 
 ## 下一步接入点
 
-- `ForwardPass::createGeometry()` 中的硬编码 cube 是 M1.4 的受控临时输入；M1.5 用 `scene::ModelAsset` 的 glTF submesh buffers 替换。
-- `ForwardPass::record()` 当前自己生成相机矩阵；M1.5 将其改为接收轨道相机的 view/projection。
+- `scene::ModelAsset` 当前保留 primitive 的 `materialIndex`，但尚未把 tinygltf image/material 数据带到 GPU；M1.6 从这里继续。
+- `ForwardPass::record()` 已接收 `OrbitCamera` 的 view/projection，并逐 submesh draw indexed。
 - 固定 shader 位于 `assets/shaders/engine/`，只服务于 M1；M2 的用户 fragment shader 编译链不得复用构建期 glslc 状态。
+
+## DamagedHelmet 本地验收资产
+
+资产未提交。当前机器路径：
+
+`E:/cpp_review/shaderlab/build/glTF-Sample-Assets/Models/DamagedHelmet/glTF/DamagedHelmet.gltf`
+
+恢复方式：clone `https://github.com/KhronosGroup/glTF-Sample-Assets.git`，仅 sparse-checkout `Models/DamagedHelmet/glTF` 到忽略的 `build/` 下。

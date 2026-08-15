@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <exception>
+#include <filesystem>
 #include <memory>
 #include <stdexcept>
 
@@ -17,6 +18,21 @@ namespace {
 bool smokeTestRequested() {
     wchar_t value[2]{};
     return GetEnvironmentVariableW(L"SHADERLAB_SMOKE_TEST", value, 2) > 0;
+}
+
+std::filesystem::path requestedModelPath() {
+    int argumentCount = 0;
+    wchar_t** arguments = CommandLineToArgvW(GetCommandLineW(), &argumentCount);
+    if (arguments == nullptr) {
+        throw std::runtime_error("CommandLineToArgvW failed");
+    }
+    const auto releaseArguments = [](wchar_t** values) { static_cast<void>(LocalFree(values)); };
+    const std::unique_ptr<wchar_t*, decltype(releaseArguments)> guard(arguments, releaseArguments);
+    if (argumentCount > 1) {
+        return std::filesystem::path(arguments[1]);
+    }
+    const std::filesystem::path defaultModel = "assets/models/DamagedHelmet/DamagedHelmet.gltf";
+    return std::filesystem::exists(defaultModel) ? defaultModel : std::filesystem::path{};
 }
 
 } // namespace
@@ -51,7 +67,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
 
         shaderlab::rhi::Device device(window.get());
         shaderlab::rhi::Swapchain swapchain(device, window.get());
-        shaderlab::render::Renderer renderer(device, swapchain, window.get());
+        shaderlab::render::Renderer renderer(device, swapchain, window.get(), requestedModelPath());
         if (smokeTest) {
             for (int frame = 0; frame < 4; ++frame) {
                 renderer.drawFrame();

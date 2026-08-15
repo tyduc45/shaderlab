@@ -23,14 +23,17 @@ void check(const VkResult result, const std::string_view operation) {
 
 } // namespace
 
-Renderer::Renderer(rhi::Device& device, rhi::Swapchain& swapchain, GLFWwindow* window)
+Renderer::Renderer(rhi::Device& device, rhi::Swapchain& swapchain, GLFWwindow* window,
+                   const std::filesystem::path& modelPath)
     : device_(device), swapchain_(swapchain), window_(window) {
     if (window_ == nullptr) {
         throw std::invalid_argument("Renderer requires a valid GLFW window");
     }
     createFrameContexts();
     createPresentSemaphores();
-    forwardPass_ = std::make_unique<ForwardPass>(device_, swapchain_);
+    forwardPass_ = std::make_unique<ForwardPass>(device_, swapchain_, modelPath);
+    camera_.frame(forwardPass_->bounds());
+    lastFrameTime_ = glfwGetTime();
 }
 
 Renderer::~Renderer() {
@@ -170,9 +173,12 @@ void Renderer::destroyPresentSemaphores() noexcept {
     presentReady_.clear();
 }
 
-void Renderer::recordFrame(const VkCommandBuffer commandBuffer, const std::uint32_t imageIndex) const {
+void Renderer::recordFrame(const VkCommandBuffer commandBuffer, const std::uint32_t imageIndex) {
+    const double now = glfwGetTime();
+    camera_.update(window_, static_cast<float>(now - lastFrameTime_));
+    lastFrameTime_ = now;
     forwardPass_->record(commandBuffer, swapchain_.image(imageIndex), swapchain_.imageView(imageIndex),
-                         swapchain_.extent(), glfwGetTime());
+                         swapchain_.extent(), camera_.viewProjection(swapchain_.extent()));
 }
 
 void Renderer::waitForFrame(const FrameContext& frame) const {
