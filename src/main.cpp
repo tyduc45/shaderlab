@@ -1,10 +1,13 @@
 #include "core/Log.h"
+#include "render/Renderer.h"
 #include "rhi/Device.h"
+#include "rhi/Swapchain.h"
 
 #include <Windows.h>
 
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
 #include <exception>
 #include <memory>
 #include <stdexcept>
@@ -47,12 +50,25 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         }
 
         shaderlab::rhi::Device device(window.get());
+        shaderlab::rhi::Swapchain swapchain(device, window.get());
+        shaderlab::render::Renderer renderer(device, swapchain, window.get());
         if (smokeTest) {
+            for (int frame = 0; frame < 4; ++frame) {
+                renderer.drawFrame();
+            }
             device.waitIdle();
+            const auto messages = Log::instance().snapshot();
+            const bool hasError = std::ranges::any_of(messages, [](const auto& message) {
+                return message.level == LogLevel::Error;
+            });
+            if (hasError) {
+                throw std::runtime_error("Vulkan smoke test received an error-level validation message");
+            }
             return 0;
         }
         while (glfwWindowShouldClose(window.get()) == GLFW_FALSE) {
-            glfwWaitEventsTimeout(0.016);
+            glfwPollEvents();
+            renderer.drawFrame();
         }
         device.waitIdle();
         return 0;

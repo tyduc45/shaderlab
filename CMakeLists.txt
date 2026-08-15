@@ -38,6 +38,10 @@ add_executable(shaderlab WIN32
     src/core/Log.h
     src/rhi/Device.cpp
     src/rhi/Device.h
+    src/rhi/Swapchain.cpp
+    src/rhi/Swapchain.h
+    src/render/Renderer.cpp
+    src/render/Renderer.h
 )
 
 target_compile_definitions(shaderlab PRIVATE
