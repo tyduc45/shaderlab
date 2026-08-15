@@ -2,7 +2,7 @@
 
 ## 当前任务
 
-M1.6：实现 glTF 材质贴图、采样与 M1 最终验收。M1.1-M1.5 已完成。
+M2.1：实现 DeletionQueue 与 JobSystem。M1 已完成并推送前收口。
 
 ## 不可破坏的不变式
 
@@ -36,6 +36,7 @@ M1.6：实现 glTF 材质贴图、采样与 M1 最终验收。M1.1-M1.5 已完�
 - 当前 smoke test 会隐藏窗口连续提交/呈现 4 帧；使用 dynamic rendering 与 synchronization2，任何 error-level validation 回调都会使进程失败。
 - M1.4 smoke test 已实际提交固定 ForwardPass 的 indexed cube，退出码 0，validation VUID 0。
 - M1.5 已用 Khronos DamagedHelmet 验证 glTF geometry：14556 vertices、46356 indices、1 submesh，4 帧退出码 0，validation VUID 0。
+- M1.6 已完成 baseColor texture/factor、白色 fallback、descriptor 和 transfer upload；目视验收通过，详见 `doc/m1_acceptance.md`。
 
 ## 已完成的 Vulkan 约束
 
@@ -52,10 +53,11 @@ M1.6：实现 glTF 材质贴图、采样与 M1 最终验收。M1.1-M1.5 已完�
 - swapchain image 通过 synchronization2 在 `UNDEFINED → COLOR_ATTACHMENT_OPTIMAL → PRESENT_SRC_KHR` 间转换。
 - resize/out-of-date 当前使用 `device.waitIdle()` 后整体重建；这是 M1 最简单且正确的编辑器路径，后续无需改动渲染 ABI。
 
-## 下一步接入点
+## M2 接入点
 
-- `scene::ModelAsset` 当前保留 primitive 的 `materialIndex`，但尚未把 tinygltf image/material 数据带到 GPU；M1.6 从这里继续。
-- `ForwardPass::record()` 已接收 `OrbitCamera` 的 view/projection，并逐 submesh draw indexed。
+- `rhi::Buffer` / `rhi::Image` 当前按 M1 启停生命周期直接销毁；M2 首先引入 `DeletionQueue`，运行时替换资源必须延迟释放。
+- `ForwardPass` 当前固定 build-time shaders 与单份 startup pipeline；M2 将用户 fragment 编译结果组织为双缓冲 `GpuState`，失败不能碰 live 状态。
+- `core::Log` 已能把 validation 与编译错误送往未来 ConsolePanel，也能在 smoke test 中通过 stderr 留证。
 - 固定 shader 位于 `assets/shaders/engine/`，只服务于 M1；M2 的用户 fragment shader 编译链不得复用构建期 glslc 状态。
 
 ## DamagedHelmet 本地验收资产

@@ -63,6 +63,10 @@ void Buffer::write(const void* data, const std::size_t bytes, const std::size_t 
         throw std::out_of_range("Buffer write is outside the allocation");
     }
     std::memcpy(static_cast<std::byte*>(mappedData_) + offset, data, bytes);
+    const auto result = vmaFlushAllocation(device_->allocator(), allocation_, offset, bytes);
+    if (result != VK_SUCCESS) {
+        throw std::runtime_error("vmaFlushAllocation failed with VkResult " + std::to_string(result));
+    }
 }
 
 void Buffer::destroy() noexcept {
@@ -77,4 +81,3 @@ void Buffer::destroy() noexcept {
 }
 
 } // namespace shaderlab::rhi
-

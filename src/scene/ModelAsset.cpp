@@ -150,6 +150,51 @@ ModelAsset ModelAsset::load(const std::filesystem::path& path) {
 
     ModelAsset asset;
     asset.sourcePath_ = std::filesystem::weakly_canonical(path);
+    asset.images_.reserve(model.images.size());
+    for (const auto& source : model.images) {
+        if (source.width <= 0 || source.height <= 0 || source.bits != 8 || source.component < 1 || source.component > 4) {
+            throw std::runtime_error("ShaderLab v1 requires 8-bit glTF images with 1-4 channels");
+        }
+        ImageData image;
+        image.name = source.name;
+        image.width = static_cast<std::uint32_t>(source.width);
+        image.height = static_cast<std::uint32_t>(source.height);
+        const auto pixelCount = static_cast<std::size_t>(source.width) * static_cast<std::size_t>(source.height);
+        image.rgba.resize(pixelCount * 4);
+        for (std::size_t pixel = 0; pixel < pixelCount; ++pixel) {
+            const auto sourceOffset = pixel * static_cast<std::size_t>(source.component);
+            const auto destinationOffset = pixel * 4;
+            const auto channel = [&source, sourceOffset](const int index, const std::uint8_t fallback) {
+                return index < source.component ? source.image[sourceOffset + static_cast<std::size_t>(index)] : fallback;
+            };
+            image.rgba[destinationOffset] = channel(0, 255);
+            image.rgba[destinationOffset + 1] = channel(1, image.rgba[destinationOffset]);
+            image.rgba[destinationOffset + 2] = channel(2, image.rgba[destinationOffset]);
+            image.rgba[destinationOffset + 3] = channel(3, 255);
+        }
+        asset.images_.push_back(std::move(image));
+    }
+    asset.materials_.reserve(model.materials.size());
+    for (const auto& source : model.materials) {
+        MaterialData material;
+        material.name = source.name;
+        const auto& factor = source.pbrMetallicRoughness.baseColorFactor;
+        if (factor.size() == 4) {
+            material.baseColorFactor = glm::vec4(static_cast<float>(factor[0]), static_cast<float>(factor[1]),
+                                                 static_cast<float>(factor[2]), static_cast<float>(factor[3]));
+        }
+        const int textureIndex = source.pbrMetallicRoughness.baseColorTexture.index;
+        if (textureIndex >= 0 && static_cast<std::size_t>(textureIndex) < model.textures.size()) {
+            const int imageIndex = model.textures[static_cast<std::size_t>(textureIndex)].source;
+            if (imageIndex >= 0 && static_cast<std::size_t>(imageIndex) < asset.images_.size()) {
+                material.baseColorImage = imageIndex;
+            }
+        }
+        asset.materials_.push_back(std::move(material));
+    }
+    if (asset.materials_.empty()) {
+        asset.materials_.push_back(MaterialData{"Default material", glm::vec4(1.0F), -1});
+    }
     std::function<void(int, const glm::mat4&)> visitNode;
     visitNode = [&](const int nodeIndex, const glm::mat4& parentTransform) {
         if (nodeIndex < 0 || static_cast<std::size_t>(nodeIndex) >= model.nodes.size()) {
@@ -262,6 +307,7 @@ ModelAsset ModelAsset::makeFallbackCube() {
     };
     asset.indices_.assign(cubeIndices.begin(), cubeIndices.end());
     asset.submeshes_.push_back(Submesh{"Fallback cube", 0, static_cast<std::uint32_t>(cubeIndices.size()), -1});
+    asset.materials_.push_back(MaterialData{"Fallback material", glm::vec4(1.0F), -1});
     return asset;
 }
 

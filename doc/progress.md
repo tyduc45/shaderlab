@@ -17,8 +17,9 @@
 | 2026-08-15 | M1.3 | DONE | Swapchain、dynamic rendering 与 synchronization2 帧循环 | Debug 构建成功；4 帧呈现 smoke test 退出码 0 且无 error-level validation 消息；CTest 1/1 通过 |
 | 2026-08-15 | M1.4 | DONE | VMA Buffer/Image、固定 shader 与 ForwardPass | Debug `/W4 /WX` 构建成功；4 帧索引绘制退出码 0；validation VUID 0；CTest 1/1 通过 |
 | 2026-08-15 | M1.5 | DONE | glTF 2.0 primitive/submesh 加载、节点变换与轨道相机 | DamagedHelmet：14556 vertices / 46356 indices / 1 submesh；4 帧 smoke 退出码 0，validation VUID 0 |
-| 2026-08-15 | M1.6 | DOING | glTF 材质贴图、采样与 M1 最终验收 | 正在实现 |
-| 2026-08-15 | M2 | TODO | 热重载骨架 | 未开始 |
+| 2026-08-15 | M1.6 | DONE | glTF baseColor image/factor、GPU 上传与 descriptor | DamagedHelmet 带贴图截图通过目视检查；4 帧 smoke 退出码 0，validation VUID 0 |
+| 2026-08-15 | M1 | DONE | “能看到东西”里程碑 | 详见 `doc/m1_acceptance.md` |
+| 2026-08-15 | M2.1 | DOING | DeletionQueue 与 JobSystem | 正在实现 |
 | 2026-08-15 | M3 | TODO | 反射参数系统 | 未开始 |
 | 2026-08-15 | M4 | TODO | Include 依赖图 | 未开始 |
 | 2026-08-15 | M5 | TODO | 多 Material 与 PSO 复用 | 未开始 |
@@ -42,6 +43,8 @@
 - smoke test 实际发现并修复两处底层问题：本地 Debug Vulkan loader 覆盖系统 loader；present binary semaphore 按 frame slot 过早复用。详见 `doc/decisions.md`。
 - 实现 `.gltf`/`.glb` 加载、scene/node 递归、TRS/matrix 变换烘焙、float position/normal/uv、8/16/32-bit index 归一化与 submesh 保留。
 - 轨道相机按模型 bounds 自动 framing；左键拖动环绕，`W/S` dolly。DamagedHelmet 本地验收资产来自 Khronos glTF-Sample-Assets，存放在忽略的 `build/` 下，未提交第三方大文件。
+- 实现 glTF 8-bit image → RGBA8 转换、VMA staging upload、synchronization2 layout transition、baseColor descriptor 与 factor；缺失贴图绑定 1×1 白色 fallback。
+- M1 最终截图显示 DamagedHelmet 正确贴图、完整轮廓与稳定深度遮挡；验收证据见 `doc/m1_acceptance.md`。
 
 ## 验证命令
 

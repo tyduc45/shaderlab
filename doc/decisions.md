@@ -33,3 +33,16 @@ MSVC AddressSanitizer 用于隔离 loader 阶段；移除本地 loader 后 Vulka
 
 隐藏窗口连续 acquire/submit/present 4 帧，进程退出码 0，validation VUID 为 0。
 
+## 2026-08-15 — M1 材质只投影 baseColor
+
+### 背景
+
+M1 的验收目标是“加载 DamagedHelmet，能看到带贴图的模型”；完整 PBR 光照库属于后续 shader 作者接口与环境系统。规格明确要求引擎不能假设用户采用 PBR。
+
+### 决策
+
+M1 固定 shader 只读取 glTF `baseColorTexture × baseColorFactor`，再施加一个简单方向光用于观察形体。Normal、metallic-roughness、AO、emissive 图片可由 tinygltf 解码，但不绑定到固定 shader。M2 以后该固定 pipeline 会被自由的用户 fragment shader 取代；PBR 仅作为 GLSL library 提供。
+
+### 验证
+
+DamagedHelmet baseColor 纹理与 UV 在 1280×720 screenshot layer 输出中目视正确，validation VUID 为 0。

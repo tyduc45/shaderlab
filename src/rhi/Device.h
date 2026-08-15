@@ -4,6 +4,7 @@
 #include <vk_mem_alloc.h>
 
 #include <cstdint>
+#include <functional>
 #include <string_view>
 
 struct GLFWwindow;
@@ -32,6 +33,7 @@ public:
     [[nodiscard]] VkSemaphore frameTimeline() const noexcept { return frameTimeline_; }
 
     void setDebugName(VkObjectType type, std::uint64_t handle, std::string_view name) const;
+    void immediateSubmit(const std::function<void(VkCommandBuffer)>& record) const;
     void waitIdle() const;
 
 private:
@@ -58,4 +60,3 @@ private:
 };
 
 } // namespace shaderlab::rhi
-

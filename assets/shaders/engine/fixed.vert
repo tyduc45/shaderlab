@@ -6,6 +6,7 @@ layout(location = 2) in vec2 inUv;
 
 layout(push_constant) uniform DrawPushConstants {
     mat4 modelViewProjection;
+    vec4 baseColorFactor;
 } drawData;
 
 layout(location = 0) out vec3 normal;

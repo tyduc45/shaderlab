@@ -336,6 +336,50 @@ void Device::waitIdle() const {
     }
 }
 
+void Device::immediateSubmit(const std::function<void(VkCommandBuffer)>& record) const {
+    VkCommandPool pool = VK_NULL_HANDLE;
+    VkFence fence = VK_NULL_HANDLE;
+    try {
+        VkCommandPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+        poolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+        poolInfo.queueFamilyIndex = graphicsQueueFamily_;
+        check(vkCreateCommandPool(device_, &poolInfo, nullptr, &pool), "vkCreateCommandPool(immediate)");
+
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        VkCommandBufferAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+        allocateInfo.commandPool = pool;
+        allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocateInfo.commandBufferCount = 1;
+        check(vkAllocateCommandBuffers(device_, &allocateInfo, &commandBuffer),
+              "vkAllocateCommandBuffers(immediate)");
+        VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        check(vkBeginCommandBuffer(commandBuffer, &beginInfo), "vkBeginCommandBuffer(immediate)");
+        record(commandBuffer);
+        check(vkEndCommandBuffer(commandBuffer), "vkEndCommandBuffer(immediate)");
+
+        VkFenceCreateInfo fenceInfo{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+        check(vkCreateFence(device_, &fenceInfo, nullptr, &fence), "vkCreateFence(immediate)");
+        VkCommandBufferSubmitInfo commandInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
+        commandInfo.commandBuffer = commandBuffer;
+        VkSubmitInfo2 submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
+        submitInfo.commandBufferInfoCount = 1;
+        submitInfo.pCommandBufferInfos = &commandInfo;
+        check(vkQueueSubmit2(graphicsQueue_, 1, &submitInfo, fence), "vkQueueSubmit2(immediate)");
+        check(vkWaitForFences(device_, 1, &fence, VK_TRUE, UINT64_MAX), "vkWaitForFences(immediate)");
+    } catch (...) {
+        if (fence != VK_NULL_HANDLE) {
+            vkDestroyFence(device_, fence, nullptr);
+        }
+        if (pool != VK_NULL_HANDLE) {
+            vkDestroyCommandPool(device_, pool, nullptr);
+        }
+        throw;
+    }
+    vkDestroyFence(device_, fence, nullptr);
+    vkDestroyCommandPool(device_, pool, nullptr);
+}
+
 void Device::destroy() noexcept {
     if (device_ != VK_NULL_HANDLE) {
         static_cast<void>(vkDeviceWaitIdle(device_));

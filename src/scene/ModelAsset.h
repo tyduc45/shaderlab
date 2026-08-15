@@ -2,6 +2,7 @@
 
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
+#include <glm/vec4.hpp>
 
 #include <cstdint>
 #include <filesystem>
@@ -24,6 +25,19 @@ struct Submesh {
     int materialIndex = -1;
 };
 
+struct ImageData {
+    std::string name;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    std::vector<std::uint8_t> rgba;
+};
+
+struct MaterialData {
+    std::string name;
+    glm::vec4 baseColorFactor{1.0F};
+    int baseColorImage = -1;
+};
+
 struct Bounds {
     glm::vec3 minimum{std::numeric_limits<float>::max()};
     glm::vec3 maximum{std::numeric_limits<float>::lowest()};
@@ -40,6 +54,8 @@ public:
     [[nodiscard]] const std::vector<Vertex>& vertices() const noexcept { return vertices_; }
     [[nodiscard]] const std::vector<std::uint32_t>& indices() const noexcept { return indices_; }
     [[nodiscard]] const std::vector<Submesh>& submeshes() const noexcept { return submeshes_; }
+    [[nodiscard]] const std::vector<ImageData>& images() const noexcept { return images_; }
+    [[nodiscard]] const std::vector<MaterialData>& materials() const noexcept { return materials_; }
     [[nodiscard]] const Bounds& bounds() const noexcept { return bounds_; }
     [[nodiscard]] const std::filesystem::path& sourcePath() const noexcept { return sourcePath_; }
 
@@ -50,8 +66,9 @@ private:
     std::vector<Vertex> vertices_;
     std::vector<std::uint32_t> indices_;
     std::vector<Submesh> submeshes_;
+    std::vector<ImageData> images_;
+    std::vector<MaterialData> materials_;
     Bounds bounds_;
 };
 
 } // namespace shaderlab::scene
-
