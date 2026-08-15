@@ -1,5 +1,8 @@
 #pragma once
 
+#include "shader/ParamMetadata.h"
+#include "shader/ReflectionResult.h"
+
 #include <cstdint>
 #include <filesystem>
 #include <string>
@@ -34,6 +37,8 @@ struct CompileResult {
     PassTag pass = PassTag::Forward;
     bool success = false;
     std::vector<std::uint32_t> spirv;
+    ReflectionResult reflection;
+    ParamMetadataMap metadata;
     std::vector<CompileError> errors;
     std::string diagnostics;
 };
@@ -48,4 +53,3 @@ private:
 };
 
 } // namespace shaderlab::shader
-

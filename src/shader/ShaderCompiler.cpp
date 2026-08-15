@@ -41,7 +41,19 @@ CompileResult ShaderCompiler::compileFragment(const CompileRequest& request) con
         return result;
     }
     result.spirv.assign(compilation.cbegin(), compilation.cend());
-    result.success = !result.spirv.empty();
+    if (result.spirv.empty()) {
+        result.errors.push_back(CompileError{request.sourcePath, 0, 0, "shaderc produced empty SPIR-V"});
+        return result;
+    }
+    try {
+        result.reflection = reflectSpirv(result.spirv);
+        result.metadata = parseParamMetadata(request.source);
+        result.success = true;
+    } catch (const std::exception& error) {
+        result.diagnostics = error.what();
+        result.errors.push_back(CompileError{request.sourcePath, 0, 0,
+                                             "SPIR-V reflection failed: " + std::string(error.what())});
+    }
     return result;
 }
 

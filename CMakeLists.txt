@@ -43,10 +43,16 @@ add_executable(shaderlab WIN32
     src/shader/GenerationCounter.h
     src/shader/ShaderCompiler.cpp
     src/shader/ShaderCompiler.h
+    src/shader/ReflectionResult.cpp
+    src/shader/ReflectionResult.h
+    src/shader/ParamMetadata.cpp
+    src/shader/ParamMetadata.h
     src/shader/ShaderReloadController.cpp
     src/shader/ShaderReloadController.h
     src/material/GpuState.cpp
     src/material/GpuState.h
+    src/material/MaterialAsset.cpp
+    src/material/MaterialAsset.h
     src/editor/EditorUi.cpp
     src/editor/EditorUi.h
     src/rhi/Volk.cpp
@@ -99,6 +105,7 @@ target_compile_definitions(shaderlab PRIVATE
     GLM_FORCE_DEPTH_ZERO_TO_ONE
     GLM_FORCE_RADIANS
     VULKAN_HPP_NO_CONSTRUCTORS
+    SPIRV_REFLECT_USE_SYSTEM_SPIRV_H
     SHADERLAB_SHADER_DIR="${SHADER_OUTPUT_DIR}"
     SHADERLAB_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
     $<$<CONFIG:Debug>:SHADERLAB_ENABLE_VALIDATION=1>
@@ -153,13 +160,20 @@ if(BUILD_TESTING)
         src/rhi/DeletionQueue.h
         src/shader/ShaderCompiler.cpp
         src/shader/ShaderCompiler.h
+        src/shader/ReflectionResult.cpp
+        src/shader/ReflectionResult.h
+        src/shader/ParamMetadata.cpp
+        src/shader/ParamMetadata.h
         src/shader/ShaderAsset.h
         src/shader/GenerationCounter.h
         src/shader/ShaderReloadController.cpp
         src/shader/ShaderReloadController.h
+        src/material/MaterialAsset.cpp
+        src/material/MaterialAsset.h
     )
     target_compile_options(shaderlab_core_tests PRIVATE /W4 /WX /permissive- /Zc:__cplusplus /utf-8)
+    target_compile_definitions(shaderlab_core_tests PRIVATE SPIRV_REFLECT_USE_SYSTEM_SPIRV_H)
     target_include_directories(shaderlab_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    target_link_libraries(shaderlab_core_tests PRIVATE unofficial::shaderc::shaderc)
+    target_link_libraries(shaderlab_core_tests PRIVATE unofficial::shaderc::shaderc unofficial::spirv-reflect)
     add_test(NAME shaderlab_core_tests COMMAND shaderlab_core_tests)
 endif()

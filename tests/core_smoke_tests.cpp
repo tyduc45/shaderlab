@@ -1,5 +1,6 @@
 #include "core/JobSystem.h"
 #include "core/Log.h"
+#include "material/MaterialAsset.h"
 #include "rhi/DeletionQueue.h"
 #include "shader/ShaderCompiler.h"
 #include "shader/GenerationCounter.h"
@@ -56,6 +57,35 @@ int main() {
     };
     const auto valid = compiler.compileFragment(validRequest);
     if (!valid.success || valid.generation != 41 || valid.spirv.empty()) {
+        return EXIT_FAILURE;
+    }
+    const shaderlab::shader::CompileRequest reflectedRequest{
+        "reflected.frag",
+        R"(#version 460
+layout(location=0) out vec4 color;
+// @param name="Tint" type=color default=(0.2,0.4,0.8,1.0) group="Surface"
+layout(set=1,binding=0) uniform MaterialParams {
+    vec4 tint;
+    float roughness;
+} material;
+// @param name="Albedo" type=texture default=white group="Textures"
+layout(set=1,binding=1) uniform sampler2D albedoTexture;
+void main(){ color=texture(albedoTexture, vec2(0.5))*material.tint; })",
+        43,
+    };
+    const auto reflected = compiler.compileFragment(reflectedRequest);
+    const auto* materialBuffer = reflected.reflection.materialBuffer();
+    if (!reflected.success || materialBuffer == nullptr || materialBuffer->binding != 0 ||
+        materialBuffer->members.size() != 2 || materialBuffer->members[0].name != "tint" ||
+        materialBuffer->members[0].offset != 0 || materialBuffer->members[1].name != "roughness" ||
+        reflected.reflection.materialTextures().size() != 1 ||
+        reflected.metadata.at("albedoTexture").displayName != "Albedo") {
+        return EXIT_FAILURE;
+    }
+    shaderlab::material::MaterialAsset material;
+    material.reconcile(reflected.reflection, reflected.metadata);
+    if (!material.parameters().contains("tint") ||
+        material.textures().at("albedoTexture") != shaderlab::material::MaterialAsset::UseModelTexture) {
         return EXIT_FAILURE;
     }
     const shaderlab::shader::CompileRequest invalidRequest{
