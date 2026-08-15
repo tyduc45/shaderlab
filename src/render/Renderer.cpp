@@ -44,6 +44,7 @@ Renderer::~Renderer() {
 }
 
 void Renderer::drawFrame() {
+    device_.deletionQueue().flush(frameNumber_);
     if (swapchain_.framebufferExtentChanged()) {
         recreateSwapchain();
     }
@@ -111,6 +112,7 @@ void Renderer::drawFrame() {
     }
 
     frameIndex_ = (frameIndex_ + 1) % FramesInFlight;
+    ++frameNumber_;
 }
 
 void Renderer::createFrameContexts() {

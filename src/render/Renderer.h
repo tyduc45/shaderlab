@@ -59,6 +59,7 @@ private:
     std::vector<VkSemaphore> presentReady_;
     std::uint32_t frameIndex_ = 0;
     std::uint64_t nextTimelineValue_ = 1;
+    std::uint64_t frameNumber_ = 0;
     double lastFrameTime_ = 0.0;
 };
 

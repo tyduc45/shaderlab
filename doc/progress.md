@@ -19,7 +19,8 @@
 | 2026-08-15 | M1.5 | DONE | glTF 2.0 primitive/submesh 加载、节点变换与轨道相机 | DamagedHelmet：14556 vertices / 46356 indices / 1 submesh；4 帧 smoke 退出码 0，validation VUID 0 |
 | 2026-08-15 | M1.6 | DONE | glTF baseColor image/factor、GPU 上传与 descriptor | DamagedHelmet 带贴图截图通过目视检查；4 帧 smoke 退出码 0，validation VUID 0 |
 | 2026-08-15 | M1 | DONE | “能看到东西”里程碑 | 详见 `doc/m1_acceptance.md` |
-| 2026-08-15 | M2.1 | DOING | DeletionQueue 与 JobSystem | 正在实现 |
+| 2026-08-15 | M2.1 | DONE | DeletionQueue、JobSystem 与线程安全 ResultQueue | 单测覆盖 3 帧延迟和 64 个并发结果；CTest 1/1；DamagedHelmet integration smoke 退出码 0 |
+| 2026-08-15 | M2.2 | DOING | ShaderCompiler、generation counter 与编译结果模型 | 正在实现 |
 | 2026-08-15 | M3 | TODO | 反射参数系统 | 未开始 |
 | 2026-08-15 | M4 | TODO | Include 依赖图 | 未开始 |
 | 2026-08-15 | M5 | TODO | 多 Material 与 PSO 复用 | 未开始 |
@@ -45,6 +46,7 @@
 - 轨道相机按模型 bounds 自动 framing；左键拖动环绕，`W/S` dolly。DamagedHelmet 本地验收资产来自 Khronos glTF-Sample-Assets，存放在忽略的 `build/` 下，未提交第三方大文件。
 - 实现 glTF 8-bit image → RGBA8 转换、VMA staging upload、synchronization2 layout transition、baseColor descriptor 与 factor；缺失贴图绑定 1×1 白色 fallback。
 - M1 最终截图显示 DamagedHelmet 正确贴图、完整轮廓与稳定深度遮挡；验收证据见 `doc/m1_acceptance.md`。
+- M2.1 新增可配置帧延迟的线程安全 DeletionQueue、异常隔离线程池和 `ResultQueue<T>`；Renderer 每帧推进绝对帧号并 flush，Device 最终 idle 后兜底 flushAll。
 
 ## 验证命令
 

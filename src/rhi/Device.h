@@ -1,5 +1,7 @@
 #pragma once
 
+#include "rhi/DeletionQueue.h"
+
 #include <volk.h>
 #include <vk_mem_alloc.h>
 
@@ -31,6 +33,7 @@ public:
     [[nodiscard]] std::uint32_t presentQueueFamily() const noexcept { return presentQueueFamily_; }
     [[nodiscard]] VmaAllocator allocator() const noexcept { return allocator_; }
     [[nodiscard]] VkSemaphore frameTimeline() const noexcept { return frameTimeline_; }
+    [[nodiscard]] DeletionQueue& deletionQueue() noexcept { return deletionQueue_; }
 
     void setDebugName(VkObjectType type, std::uint64_t handle, std::string_view name) const;
     void immediateSubmit(const std::function<void(VkCommandBuffer)>& record) const;
@@ -57,6 +60,7 @@ private:
     std::uint32_t presentQueueFamily_ = 0;
     VkSemaphore frameTimeline_ = VK_NULL_HANDLE;
     VmaAllocator allocator_ = VK_NULL_HANDLE;
+    DeletionQueue deletionQueue_;
 };
 
 } // namespace shaderlab::rhi

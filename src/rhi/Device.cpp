@@ -384,6 +384,7 @@ void Device::destroy() noexcept {
     if (device_ != VK_NULL_HANDLE) {
         static_cast<void>(vkDeviceWaitIdle(device_));
     }
+    deletionQueue_.flushAll();
     if (allocator_ != VK_NULL_HANDLE) {
         vmaDestroyAllocator(allocator_);
         allocator_ = VK_NULL_HANDLE;

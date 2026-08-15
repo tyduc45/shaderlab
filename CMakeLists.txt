@@ -37,6 +37,10 @@ add_executable(shaderlab WIN32
     src/main.cpp
     src/core/Log.cpp
     src/core/Log.h
+    src/core/JobSystem.cpp
+    src/core/JobSystem.h
+    src/rhi/DeletionQueue.cpp
+    src/rhi/DeletionQueue.h
     src/rhi/Device.cpp
     src/rhi/Device.h
     src/rhi/Buffer.cpp
@@ -130,6 +134,10 @@ if(BUILD_TESTING)
         tests/core_smoke_tests.cpp
         src/core/Log.cpp
         src/core/Log.h
+        src/core/JobSystem.cpp
+        src/core/JobSystem.h
+        src/rhi/DeletionQueue.cpp
+        src/rhi/DeletionQueue.h
     )
     target_compile_options(shaderlab_core_tests PRIVATE /W4 /WX /permissive- /Zc:__cplusplus /utf-8)
     target_include_directories(shaderlab_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

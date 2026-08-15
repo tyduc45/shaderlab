@@ -2,7 +2,7 @@
 
 ## 当前任务
 
-M2.1：实现 DeletionQueue 与 JobSystem。M1 已完成并推送前收口。
+M2.2：实现 ShaderCompiler、generation counter 与编译结果模型。M1、M2.1 已完成。
 
 ## 不可破坏的不变式
 
@@ -55,7 +55,8 @@ M2.1：实现 DeletionQueue 与 JobSystem。M1 已完成并推送前收口。
 
 ## M2 接入点
 
-- `rhi::Buffer` / `rhi::Image` 当前按 M1 启停生命周期直接销毁；M2 首先引入 `DeletionQueue`，运行时替换资源必须延迟释放。
+- `Device::deletionQueue()` 已由 Renderer 绝对帧号驱动，默认延迟 3 帧（`FRAMES_IN_FLIGHT + 1`）；热重载旧状态应通过 `push(frame, destroy)` 进入该队列。
+- `core::JobSystem` 捕获任务异常并继续工作；`ResultQueue<T>` 用于将 shader compile 结果带回主线程，主线程不得阻塞等待编译。
 - `ForwardPass` 当前固定 build-time shaders 与单份 startup pipeline；M2 将用户 fragment 编译结果组织为双缓冲 `GpuState`，失败不能碰 live 状态。
 - `core::Log` 已能把 validation 与编译错误送往未来 ConsolePanel，也能在 smoke test 中通过 stderr 留证。
 - 固定 shader 位于 `assets/shaders/engine/`，只服务于 M1；M2 的用户 fragment shader 编译链不得复用构建期 glslc 状态。
