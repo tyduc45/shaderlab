@@ -14,19 +14,21 @@
 - `Console` 每帧读取线程安全 `core::Log` 快照，按 Info/Warning/Error/Validation 着色并在用户位于尾部时自动跟随。
 - GLFW backend 链式安装回调；UI 捕获的左键按下不会再启动轨道相机，拖动中的释放事件仍始终送达相机。
 - 场景 ForwardPass 结束后保持 swapchain image 为 `COLOR_ATTACHMENT_OPTIMAL`；UI 使用第二个 dynamic-rendering pass 以 `LOAD` 合成，最终再执行 present barrier。
-- UI vertex/index buffer 按 frame-in-flight slot 独立持有，重用前沿用 Renderer 的 timeline wait，避免 CPU 覆盖 GPU 正在读取的数据。
-- UI font atlas、descriptor、pipeline 和全部 Vulkan 对象具备 debug name；swapchain 重建时在 device idle 后同步重建 UI GPU 状态。
+- UI 的 font atlas、descriptor、pipeline、上传 buffer 和 draw command 由 vcpkg 官方 `imgui_impl_vulkan` 管理。
+- swapchain 重建时在 device idle 后同步重建官方 Vulkan backend；项目只保留主交换链同步和 dynamic-rendering scope。
 
-## volk 兼容决策
+## Vulkan backend 决策
 
-vcpkg 的预编译 ImGui Vulkan backend 使用直接 Vulkan prototype，而 ShaderLab 固定采用 `VK_NO_PROTOTYPES + volk`。两套符号在链接后导致 backend 初始化访问冲突。
+最初因 vcpkg backend 的全局 Vulkan 函数符号与全局 Volk 函数指针数据符号重名，官方 backend 初始化发生访问冲突。项目一度以精简自制 renderer 绕过问题。
 
-最终保留 ImGui 核心与 GLFW backend，使用项目内的精简 Vulkan renderer：
+复核源码和二进制后确认，应当隔离加载符号而不是重写官方 renderer。当前方案为：
 
-- 所有 Vulkan 调用继续通过 volk。
-- UI pipeline 使用 dynamic rendering，不创建 render pass/framebuffer。
-- UI shader 由构建期 glslc 生成 SPIR-V。
-- 当前只绑定 ImGui font atlas；M3 Inspector 如需展示纹理缩略图时再扩展 texture registry。
+- ShaderLab 自身使用 `VOLK_NAMESPACE` 下的 Volk。
+- ImGui 使用 vcpkg 官方 `imgui_impl_vulkan` 和 `Vulkan::Vulkan`，Volk 不参与 ImGui 函数加载。
+- UI pipeline 继续使用 dynamic rendering，不创建 render pass/framebuffer。
+- M3 Inspector 可直接使用官方 backend 的 texture registration API。
+
+根因、符号证据和长期原则见 `doc/imgui_vulkan_backend.md`。
 
 ## 自动验证
 
@@ -37,6 +39,7 @@ vcpkg 的预编译 ImGui Vulkan backend 使用直接 Vulkan prototype，而 Shad
 - 基础 UI Vulkan smoke：4 帧退出码 0。
 - reload+UI smoke：generation 1–10 只应用 10；generation 11 语法失败保持 live=10；退出码 0。
 - 两条 smoke 均无非预期 error-level validation 消息。
+- 后续官方 backend 迁移再次通过基础 smoke、10 次 reload、100 次 stress、CTest 1/1 和连续两次 resize 重建。
 
 ## 视觉验证
 
@@ -47,6 +50,12 @@ vcpkg 的预编译 ImGui Vulkan backend 使用直接 Vulkan prototype，而 Shad
 - 字体清晰，透明混合正确，场景仍完整可见。
 - 本地 PNG：`build/ui-screenshots-layout/2.png`（Git 忽略）。
 - SHA-256：`21336F110F3A57E6D218974994B33ABC47583CAE6678A83B6AFE22C485CAA8A4`。
+
+迁移到官方 backend 后重新捕获第 2 帧：
+
+- 本地 PNG：`build/ui-screenshots-official/2.png`（Git 忽略）。
+- 字体、透明混合、场景合成和 Console 目视通过。
+- SHA-256：`37C7681027F9A9897FCDEBA09F80F711B2043717FEFD26813E67749264598AD6`。
 
 ## 下一步
 

@@ -49,6 +49,7 @@ add_executable(shaderlab WIN32
     src/material/GpuState.h
     src/editor/EditorUi.cpp
     src/editor/EditorUi.h
+    src/rhi/Volk.cpp
     src/rhi/DeletionQueue.cpp
     src/rhi/DeletionQueue.h
     src/rhi/Device.cpp
@@ -73,8 +74,6 @@ set(SHADER_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/shaders")
 set(FIXED_SHADER_SOURCES
     assets/shaders/engine/fixed.vert
     assets/shaders/engine/fixed.frag
-    assets/shaders/engine/imgui.vert
-    assets/shaders/engine/imgui.frag
 )
 set(FIXED_SHADER_OUTPUTS)
 foreach(SHADER_SOURCE IN LISTS FIXED_SHADER_SOURCES)
@@ -96,6 +95,7 @@ add_dependencies(shaderlab shaderlab_fixed_shaders)
 target_compile_definitions(shaderlab PRIVATE
     GLFW_INCLUDE_NONE
     VK_NO_PROTOTYPES
+    VOLK_NAMESPACE
     GLM_FORCE_DEPTH_ZERO_TO_ONE
     GLM_FORCE_RADIANS
     VULKAN_HPP_NO_CONSTRUCTORS
@@ -126,7 +126,7 @@ target_include_directories(shaderlab PRIVATE
 
 target_link_libraries(shaderlab PRIVATE
     Vulkan::Headers
-    volk::volk
+    volk::volk_headers
     glfw
     glm::glm
     nlohmann_json::nlohmann_json

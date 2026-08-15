@@ -12,6 +12,7 @@ M2.5 自动压力与延迟验收已完成：100/100 顺序 generation 应用，7
 4. 所有运行期 Vulkan 销毁必须进入 DeletionQueue（Device 最终清理除外）。
 5. 编译失败不得覆盖上一次成功的 include 依赖图。
 6. 不实现 deferred、clustered/tiled lights、render graph、自定义 VS、face-level 材质、跨平台抽象、shader graph、OIT 或骨骼动画。
+7. 第三方依赖存在官方 Vulkan backend 时默认使用官方实现；加载冲突先调整编译、命名空间和链接边界，除非官方 backend 明确缺少必要能力，否则不得自行重写 renderer。
 
 ## 恢复工作步骤
 
@@ -40,6 +41,7 @@ M2.5 自动压力与延迟验收已完成：100/100 顺序 generation 应用，7
 - M1.7 已将相机输入提前到 Vulkan 阻塞点之前，使用 GLFW 回调累积位移、拖动捕获/raw mouse 和约 20ms 半衰期平滑；构建、CTest、Vulkan smoke 与用户手感验收均通过，详见 `doc/input_responsiveness.md`。
 - M2.3b reload smoke 连续触发 10 代只应用 generation 10；generation 11 语法错误保持 live generation 10，详见 `doc/m2_gpu_state.md`。
 - M2.4 基础 UI 与 reload+UI smoke 均退出码 0；DamagedHelmet UI 截图目视通过，详见 `doc/m2_editor_ui.md`。
+- M2.4a 已恢复 vcpkg 官方 `imgui_impl_vulkan`：namespaced Volk 与 ImGui 的直接 loader 调用符号隔离；基础/10 次/100 次 smoke、CTest 1/1、两次 resize 和新截图均通过，详见 `doc/imgui_vulkan_backend.md`。
 - M2.5 100 次顺序 reload 退出码 0、最终 generation 100、DeletionQueue=0；快速 10 次最终代 43.0ms，详见 `doc/m2_acceptance.md`。
 
 ## 已完成的 Vulkan 约束
@@ -68,7 +70,8 @@ M2.5 自动压力与延迟验收已完成：100/100 顺序 generation 应用，7
 - `ForwardPass` 持有 `liveGpuState_`/`pendingGpuState_`；帧边界先安全排队旧 live 的延迟销毁，再原子 swap。不要把任何可能失败的 Vulkan 创建调用移入 swap 区间。
 - `GpuState` 当前拥有 pipeline layout + pipeline；M3 必须把随反射变化的 descriptor layout/pool/set/UBO 扩入同一原子状态，不可拆开切换。
 - 用户 fragment 位于 `assets/shaders/user/default.frag`，F5 触发异步编译；材质 descriptor 已从 set 0 迁到固定 set 1，set 0 当前为空布局占位。
-- `editor::EditorUi` 使用 ImGui core + GLFW backend，但 Vulkan draw 由项目内 volk-compatible renderer 完成；不要重新接入 vcpkg 预编译 `ImGui_ImplVulkan_*`，其 prototype ABI 与当前 volk 配置冲突。
+- `editor::EditorUi` 使用 vcpkg ImGui core + GLFW backend + 官方 `imgui_impl_vulkan`。ShaderLab 自身的 Volk 必须保持 `VOLK_NAMESPACE`，不得改回全局符号 `volk::volk`，否则会重新引入 ImGui 直接函数调用与 Volk 数据符号的同名冲突。
+- ImGui 官方 backend 独立通过 `Vulkan::Vulkan` 调用 loader；不要为 ImGui 定义 Volk 宏或调用其 load-functions API。主交换链 barrier 和 dynamic-rendering begin/end 仍由 ShaderLab 负责。
 - UI 在 ForwardPass 后以 LOAD dynamic rendering 合成；`ForwardPass::transitionToPresent()` 必须保持在 UI record 之后。
 - `ShaderCompiler` 的 `shaderc::Compiler` 必须保持 thread-local；Controller 构造预热两个持久 worker。改回每任务构造会让首次 Compile 回退到约 739ms。
 - `core::Log` 已能把 validation 与编译错误送往未来 ConsolePanel，也能在 smoke test 中通过 stderr 留证。

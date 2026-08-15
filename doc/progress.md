@@ -25,6 +25,7 @@
 | 2026-08-15 | M1.7 交互改进 | DONE | 阻塞前相机更新、回调增量采样、raw mouse 与轻量平滑 | Debug `/W4 /WX`、CTest 1/1、Vulkan smoke 退出码 0；用户手感验收通过 |
 | 2026-08-15 | M2.3b | DONE | 双缓冲 GpuState、异步 pipeline 创建与帧边界原子 swap | 10 代仅应用 generation 10；generation 11 语法失败保持 live=10；Vulkan smoke 退出码 0 |
 | 2026-08-15 | M2.4 | DONE | ImGui 编辑器外壳、Compile 状态与 Console 面板 | dynamic-rendering UI smoke + reload smoke 退出码 0；截图目视通过 |
+| 2026-08-15 | M2.4a 集成修正 | DONE | namespaced Volk 隔离项目符号，恢复 vcpkg 官方 ImGui Vulkan backend | Debug `/W4 /WX`；3 类 smoke；CTest 1/1；两次 resize；官方 backend 截图通过 |
 | 2026-08-15 | M2.5 | DONE | shaderc worker 预热、reload 延迟测量与 100 次顺序压力验证 | 100/100 应用；7.9/9.8/14.9ms min/avg/max；DeletionQueue=0；退出码 0 |
 | 2026-08-15 | M2 | DOING | “热重载骨架”milestone | 自动验收通过；等待用户可见 Compile/错误保持 live/Console 验收 |
 | 2026-08-15 | M3 | TODO | 反射参数系统 | 未开始 |
@@ -64,10 +65,13 @@
 - shader reload Vulkan smoke 连续触发 10 次只应用最后一代；随后语法错误准确报告第 2 行且 live generation 保持 10。详见 `doc/m2_gpu_state.md`。
 - M2.3b 已以提交 `dc787d2` 推送到 `origin/main`。
 - M2.4 新增 ImGui Shader/Console 面板和 Compile 按钮；场景与 UI 使用两个连续 dynamic-rendering pass，present barrier 延后到 UI 合成结束。
-- vcpkg 预编译 Vulkan backend 与 volk/no-prototypes 发生 ABI 冲突，最终保留 ImGui GLFW backend 并实现精简 volk-compatible UI renderer；详细原因与视觉证据见 `doc/m2_editor_ui.md`。
+- vcpkg 预编译 Vulkan backend 与当时全局 namespace 的 Volk 发生函数/数据同名符号冲突，初版以精简项目内 renderer 绕过；后续复核确认这不是官方 backend 能力缺失。
 - M2.4 已以提交 `cf7ac3b` 推送到 `origin/main`。
 - M2.5 将 shaderc compiler 改为每个持久 worker 的 thread-local 实例，并在 controller 构造时并行预热；第一次用户 generation 从冷启动对照 739.2ms 降至 9.3ms。
 - 100 次顺序 reload 全部逐代应用，耗时 min/avg/max 为 7.9/9.8/14.9ms，最终 DeletionQueue 归零；快速 10 次最终代为 43.0ms，均低于 200ms。M2 自动验收详见 `doc/m2_acceptance.md`。
+- M2.4a 将 ShaderLab 的 Volk 编译进 C++ `volk` namespace，避免与官方 backend 的全局 Vulkan 函数符号冲突；恢复 vcpkg `imgui_impl_vulkan`，删除自制 UI shader、pipeline、descriptor、font atlas 与 draw buffer。
+- 确立长期原则：依赖库存在官方 Vulkan backend 时默认使用官方实现；加载冲突优先通过编译、命名空间和链接边界解决，除非官方 backend 明确缺少能力，否则不自行重写。
+- 官方 backend 集成通过 Debug 构建、CTest、基础/10 次/100 次 smoke、两次 resize 和 Vulkan screenshot 目视验证；完整留痕见 `doc/imgui_vulkan_backend.md`。
 
 ## 验证命令
 

@@ -316,7 +316,7 @@ void Renderer::recordFrame(const VkCommandBuffer commandBuffer, const std::uint3
     const VkImageView colorView = swapchain_.imageView(imageIndex);
     forwardPass_->record(commandBuffer, colorImage, colorView,
                          swapchain_.extent(), camera_.viewProjection(swapchain_.extent()));
-    editorUi_->record(commandBuffer, colorImage, colorView, swapchain_.extent(), frameIndex_);
+    editorUi_->record(commandBuffer, colorImage, colorView, swapchain_.extent());
     forwardPass_->transitionToPresent(commandBuffer, colorImage);
 }
 

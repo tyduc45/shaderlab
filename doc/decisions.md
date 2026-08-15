@@ -2,6 +2,8 @@
 
 ## 2026-08-15 — Vulkan loader 只在运行时由 volk 加载
 
+> 状态：已被同日“官方 ImGui Vulkan backend 与 namespaced Volk 分层”决策局部修订。ShaderLab 自身 Vulkan 调用仍由 Volk 加载；ImGui 官方 backend 独立链接 vcpkg `Vulkan::Vulkan`，因此本地 `vulkan-1.dll` 不再被视为错误。
+
 ### 背景
 
 初始 CMake 链接了 `Vulkan::Vulkan`/VMA CMake target。vcpkg 因此把 Debug `vulkan-1.dll` 复制到可执行文件目录，Windows DLL 搜索顺序使它覆盖系统 loader，进程在 `volkInitialize()` 期间以 `0xC0000005` 退出。
@@ -83,23 +85,30 @@ Debug `/W4 /WX` 构建、CTest 1/1 和 4 帧 Vulkan smoke test 均通过；用�
 
 实际 Vulkan smoke 连续触发 10 代只应用第 10 代；语法错误的第 11 代没有创建 pending、没有替换 live。继续渲染和延迟销毁期间 validation 无非预期错误。
 
-## 2026-08-15 — ImGui Vulkan 绘制使用项目内 volk-compatible backend
+## 2026-08-15 — 官方 ImGui Vulkan backend 与 namespaced Volk 分层
 
 ### 背景
 
-vcpkg 的 ImGui static library 将官方 Vulkan backend 以直接 Vulkan prototype 编译；ShaderLab 则定义 `VK_NO_PROTOTYPES` 并由 volk 暴露同名函数指针。实际链接后官方 backend 在 `ImGui_ImplVulkan_Init` 发生访问冲突，显式调用其 load-functions API 也不能改变库本身已编译的调用 ABI。
+vcpkg 的 ImGui static library 已包含官方 `imgui_impl_vulkan.cpp`，并以直接 Vulkan prototype 编译；ShaderLab 则定义 `VK_NO_PROTOTYPES`，原先链接的全局 namespace Volk 暴露同名函数指针变量。二进制检查确认官方 backend 生成 `call vkCreateSampler`，而 Volk 提供同名数据符号 `PFN_vkCreateSampler vkCreateSampler`，两者在 Windows x64 COFF 链接时可能错误绑定，解释了此前 `ImGui_ImplVulkan_Init` 的访问冲突。
+
+这不是官方 backend 缺少 Volk 适配，也不是必须重写 renderer。此前为绕开链接冲突实现项目内 UI renderer，扩大了维护范围；正确边界是保留官方 renderer，只隔离 ShaderLab 自身的函数加载符号。
 
 ### 决策
 
-- 不改变 ShaderLab 的 volk-only loader 约束，也不引入本地 `vulkan-1.dll`。
-- 继续使用 vcpkg ImGui core/docking 与 GLFW backend。
-- 项目内实现只满足当前编辑器需求的 Vulkan renderer：font atlas、每帧 VMA buffer、descriptor、alpha blend pipeline、scissor 和 indexed draw。
-- UI 与场景一样只使用 synchronization2 和 dynamic rendering；不引入 render pass/framebuffer。
-- UI 纹理 registry 留到 M3 Inspector 需要缩略图时扩展，M2 不提前实现泛化层。
+- vcpkg `imgui[vulkan-binding]` 继续提供未经修改的官方 Vulkan backend，并通过 `Vulkan::Vulkan` 调用 loader。
+- ShaderLab 将 Volk 以 `VOLK_NAMESPACE` + header implementation 编译到 `volk` C++ namespace，不再链接全局符号版本 `volk::volk`。
+- ShaderLab 自身保留 `VK_NO_PROTOTYPES` 和 Volk；ImGui 不定义 `IMGUI_IMPL_VULKAN_USE_VOLK`，也不调用 `ImGui_ImplVulkan_LoadFunctions()`。
+- 删除项目内 UI font atlas、descriptor、pipeline、VMA draw buffer 和 UI shader；交还官方 backend 管理。
+- ShaderLab 只保留主交换链 barrier 与 dynamic-rendering begin/end，这是官方 backend 要求调用方提供的渲染上下文，不属于自制 backend。
+- vcpkg `Vulkan::Vulkan` 会把 `vulkan-1.dll` 部署到 Debug 输出目录；它只服务官方 ImGui 调用路径，不改变 ShaderLab 自身使用 Volk 的约束。
+
+### 后续原则
+
+依赖库存在官方 Vulkan backend 时，默认使用官方 backend。若加载方式冲突，优先调整编译、命名空间和链接边界；除非官方 backend 明确缺少必要能力，否则不自行重写渲染后端。
 
 ### 验证
 
-基础 UI smoke 和 reload+UI smoke 均退出码 0；DamagedHelmet 截图确认两个面板、字体、混合和场景合成正确。
+Debug `/W4 /WX` 构建、CTest 1/1、基础 UI smoke、10 次 reload smoke 与 100 次 stress 均通过。二进制同时显示 namespaced Volk 数据符号和 `vulkan-1.dll` ImGui 函数导入；连续两次窗口 resize 后官方 backend 随交换链重建并正常退出。Vulkan screenshot layer 第 2 帧确认字体、透明混合、场景合成与 Console 正常，详见 `doc/imgui_vulkan_backend.md`。
 
 ## 2026-08-15 — shaderc 一次性初始化在持久 worker 上预热
 

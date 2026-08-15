@@ -24,6 +24,8 @@ M2 自动验收通过，等待用户完成可见交互验收后收口 milestone�
 - CTest：1/1 通过。
 - dynamic-rendering 场景 + UI Vulkan smoke：退出码 0。
 - DamagedHelmet UI 截图：目视通过，见 `doc/m2_editor_ui.md`。
+- UI 已迁移到 vcpkg 官方 `imgui_impl_vulkan`；ShaderLab 使用 namespaced Volk 隔离符号，详见 `doc/imgui_vulkan_backend.md`。
+- 官方 backend 迁移后重新运行基础 smoke、10 次 reload smoke、100 次 stress 和连续两次 resize，均退出码 0，无非预期 error-level validation。
 
 ### 连续快速触发 10 次
 
