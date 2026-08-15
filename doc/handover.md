@@ -2,7 +2,7 @@
 
 ## 当前任务
 
-初始化项目，并开始 M1（能看到东西）。
+M1.2：实现 Vulkan instance/device、debug utils、VMA 与 timeline semaphore。M1.1 工程骨架已完成。
 
 ## 不可破坏的不变式
 
@@ -25,4 +25,11 @@
 - 工作目录：`E:/cpp_review/shaderlab`
 - 远端：`https://github.com/tyduc45/shaderlab.git`
 - 目标：Windows 10/11 x64、MSVC 2022、CMake 3.25+、Vulkan 1.4。
+- 本机 vcpkg：`E:/cpp_review/vcpkg`（仓库外，仅用于构建验证）。
+
+## 最近验证
+
+- `cmake --preset windows-msvc`：成功。
+- `cmake --build --preset debug`：成功，`/W4 /WX`。
+- `ctest --preset debug`：1/1 通过。
 

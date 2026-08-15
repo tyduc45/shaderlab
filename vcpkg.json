@@ -1,0 +1,29 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "shaderlab",
+  "version-semver": "0.1.0",
+  "builtin-baseline": "e55144c5a465b53bc71bd0b59111ea0b8bb039a5",
+  "dependencies": [
+    "glfw3",
+    "glm",
+    {
+      "name": "imgui",
+      "features": [
+        "docking-experimental",
+        "glfw-binding",
+        "vulkan-binding"
+      ]
+    },
+    "imguizmo",
+    "nlohmann-json",
+    "shaderc",
+    "spirv-reflect",
+    "stb",
+    "tinygltf",
+    "volk",
+    "vulkan-headers",
+    "vulkan-loader",
+    "vulkan-memory-allocator"
+  ]
+}
+

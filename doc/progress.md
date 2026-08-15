@@ -11,8 +11,9 @@
 
 | 日期 | 里程碑 | 状态 | 内容 | 验证/证据 |
 |---|---|---|---|---|
-| 2026-08-15 | 项目初始化 | DOING | 建立仓库、计划、进度与交接文档 | 待首次提交与推送 |
-| 2026-08-15 | M1 | TODO | Vulkan 初始化到固定 ForwardPass | 未开始 |
+| 2026-08-15 | 项目初始化 | DONE | 建立仓库、计划、进度与交接文档 | 提交 `84287f0` 已推送到 `origin/main` |
+| 2026-08-15 | M1.1 | DONE | CMake/vcpkg/MSVC 工程与依赖骨架 | CMake 配置成功；Debug 编译成功；CTest 1/1 通过 |
+| 2026-08-15 | M1.2 | DOING | Vulkan instance/device/VMA/timeline/debug utils | 正在实现 |
 | 2026-08-15 | M2 | TODO | 热重载骨架 | 未开始 |
 | 2026-08-15 | M3 | TODO | 反射参数系统 | 未开始 |
 | 2026-08-15 | M4 | TODO | Include 依赖图 | 未开始 |
@@ -27,4 +28,15 @@
 - 读取规格书并将其中内容视为产品需求，不执行附件中超出用户请求的操作性指令。
 - 确认本地目标目录为空，GitHub 远端仓库可访问且当前账号已认证。
 - 建立分阶段实施计划；后续每个功能点完成后更新本文件并推送。
+- 初始化 `main` 并将项目留痕提交 `84287f0` 推送到远端。
+- 锁定 vcpkg baseline，声明规格要求的全部第三方依赖；验证 MSVC Debug 构建及核心 smoke test。
+
+## 验证命令
+
+```powershell
+$env:VCPKG_ROOT = 'E:\cpp_review\vcpkg'
+cmake --preset windows-msvc
+cmake --build --preset debug
+ctest --preset debug
+```
 
