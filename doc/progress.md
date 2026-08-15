@@ -23,7 +23,8 @@
 | 2026-08-15 | M2.2 | DONE | ShaderCompiler、generation counter 与编译结果模型 | shaderc Vulkan 1.4/SPIR-V 1.6；成功/语法错误与行号、10 次 generation 测试；CTest 1/1 |
 | 2026-08-15 | M2.3a | DONE | 异步编译调度、文件读取与过期 generation 丢弃 | 2 worker 并发 10 次请求，仅第 10 代成功结果可消费；CTest 1/1 |
 | 2026-08-15 | M1.7 交互改进 | DONE | 阻塞前相机更新、回调增量采样、raw mouse 与轻量平滑 | Debug `/W4 /WX`、CTest 1/1、Vulkan smoke 退出码 0；用户手感验收通过 |
-| 2026-08-15 | M2.3b | DOING | 双缓冲 GpuState、pipeline 创建与帧边界 swap | 正在实现 |
+| 2026-08-15 | M2.3b | DONE | 双缓冲 GpuState、异步 pipeline 创建与帧边界原子 swap | 10 代仅应用 generation 10；generation 11 语法失败保持 live=10；Vulkan smoke 退出码 0 |
+| 2026-08-15 | M2.4 | DOING | ImGui 编辑器外壳、Compile 按钮与 Console 面板 | 待实现 |
 | 2026-08-15 | M3 | TODO | 反射参数系统 | 未开始 |
 | 2026-08-15 | M4 | TODO | Include 依赖图 | 未开始 |
 | 2026-08-15 | M5 | TODO | 多 Material 与 PSO 复用 | 未开始 |
@@ -55,6 +56,10 @@
 - 插入处理 M1 交互卡顿：确认鼠标没有带动资源或 shader 系统；将相机更新移到 Vulkan 阻塞点之前，改为 GLFW 回调累积位移，拖动时捕获光标并在可用时启用 raw mouse，增加约 20ms 半衰期的时间相关平滑。
 - 交互改进的实现与自动验证已完成，详细记录见 `doc/input_responsiveness.md`；按用户最新指令，暂不提交/推送，等待人工验收成功。
 - 用户确认 M1.7 手感验收成功，允许提交推送，并要求按当前记录继续 M2.3b。
+- M1.7 已以提交 `59a10f2` 推送到 `origin/main`。
+- M2.3b 新增 `material::GpuState`，CPU 编译成功后在独立 GPU worker 创建候选 pipeline group；主线程只在帧边界交换 live/pending，旧 live 进入 3 帧 DeletionQueue。
+- 固定 descriptor ABI 向规格对齐：set 0 预留全局布局，baseColor material descriptor 使用 set 1；新增可由 F5 手动编译的 `assets/shaders/user/default.frag`。
+- shader reload Vulkan smoke 连续触发 10 次只应用最后一代；随后语法错误准确报告第 2 行且 live generation 保持 10。详见 `doc/m2_gpu_state.md`。
 
 ## 验证命令
 

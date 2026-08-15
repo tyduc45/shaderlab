@@ -45,6 +45,8 @@ add_executable(shaderlab WIN32
     src/shader/ShaderCompiler.h
     src/shader/ShaderReloadController.cpp
     src/shader/ShaderReloadController.h
+    src/material/GpuState.cpp
+    src/material/GpuState.h
     src/rhi/DeletionQueue.cpp
     src/rhi/DeletionQueue.h
     src/rhi/Device.cpp
@@ -94,6 +96,7 @@ target_compile_definitions(shaderlab PRIVATE
     GLM_FORCE_RADIANS
     VULKAN_HPP_NO_CONSTRUCTORS
     SHADERLAB_SHADER_DIR="${SHADER_OUTPUT_DIR}"
+    SHADERLAB_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
     $<$<CONFIG:Debug>:SHADERLAB_ENABLE_VALIDATION=1>
     $<$<NOT:$<CONFIG:Debug>>:SHADERLAB_ENABLE_VALIDATION=0>
 )

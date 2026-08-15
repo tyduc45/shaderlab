@@ -1,5 +1,6 @@
 #include "render/passes/ForwardPass.h"
 
+#include "material/GpuState.h"
 #include "rhi/Device.h"
 #include "rhi/Swapchain.h"
 
@@ -57,26 +58,46 @@ VkShaderModule createShaderModule(rhi::Device& device, const std::filesystem::pa
     return module;
 }
 
+VkShaderModule createShaderModule(rhi::Device& device, const std::span<const std::uint32_t> words,
+                                  const std::string_view name) {
+    if (words.empty()) {
+        throw std::invalid_argument("Cannot create a shader module from empty SPIR-V");
+    }
+    VkShaderModuleCreateInfo createInfo{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+    createInfo.codeSize = words.size() * sizeof(std::uint32_t);
+    createInfo.pCode = words.data();
+    VkShaderModule module = VK_NULL_HANDLE;
+    const auto result = vkCreateShaderModule(device.logicalDevice(), &createInfo, nullptr, &module);
+    if (result != VK_SUCCESS) {
+        throw std::runtime_error("vkCreateShaderModule failed with VkResult " + std::to_string(result));
+    }
+    device.setDebugName(VK_OBJECT_TYPE_SHADER_MODULE, reinterpret_cast<std::uint64_t>(module), name);
+    return module;
+}
+
 } // namespace
 
 ForwardPass::ForwardPass(rhi::Device& device, const rhi::Swapchain& swapchain,
                          const std::filesystem::path& modelPath)
     : device_(device), model_(modelPath.empty() ? scene::ModelAsset::makeFallbackCube()
-                                                : scene::ModelAsset::load(modelPath)) {
+                                                : scene::ModelAsset::load(modelPath)),
+      colorFormat_(swapchain.format()) {
     try {
         createGeometry();
         createDepth(swapchain.extent());
         createMaterials();
-        createPipeline(swapchain.format());
+        createInitialGpuState();
     } catch (...) {
-        destroyPipeline();
+        pendingGpuState_.reset();
+        liveGpuState_.reset();
         destroyMaterials();
         throw;
     }
 }
 
 ForwardPass::~ForwardPass() {
-    destroyPipeline();
+    pendingGpuState_.reset();
+    liveGpuState_.reset();
     destroyMaterials();
 }
 
@@ -139,7 +160,7 @@ void ForwardPass::record(const VkCommandBuffer commandBuffer, const VkImage colo
     const VkRect2D scissor{{0, 0}, extent};
     vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, liveGpuState_->pipeline());
     const VkDeviceSize offset = 0;
     const VkBuffer vertexBuffer = vertexBuffer_.handle();
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &offset);
@@ -150,12 +171,12 @@ void ForwardPass::record(const VkCommandBuffer commandBuffer, const VkImage colo
                                      ? model_.materials()[slot].baseColorFactor
                                      : glm::vec4(1.0F);
         const DrawPushConstants push{viewProjection, factor};
-        vkCmdPushConstants(commandBuffer, pipelineLayout_,
+        vkCmdPushConstants(commandBuffer, liveGpuState_->pipelineLayout(),
                            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                            0, sizeof(push), &push);
         const VkDescriptorSet materialSet = materialSets_.at(slot);
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
-                                0, 1, &materialSet, 0, nullptr);
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                liveGpuState_->pipelineLayout(), 1, 1, &materialSet, 0, nullptr);
         vkCmdDrawIndexed(commandBuffer, submesh.indexCount, 1, submesh.firstIndex, 0, 0);
     }
     vkCmdEndRendering(commandBuffer);
@@ -214,6 +235,15 @@ void ForwardPass::createMaterials() {
         throw std::runtime_error("vkCreateSampler failed with VkResult " + std::to_string(result));
     }
     device_.setDebugName(VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<std::uint64_t>(sampler_), "M1 material sampler");
+
+    VkDescriptorSetLayoutCreateInfo globalLayoutInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    result = vkCreateDescriptorSetLayout(device_.logicalDevice(), &globalLayoutInfo, nullptr, &globalLayout_);
+    if (result != VK_SUCCESS) {
+        throw std::runtime_error("vkCreateDescriptorSetLayout(global) failed with VkResult " +
+                                 std::to_string(result));
+    }
+    device_.setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+                         reinterpret_cast<std::uint64_t>(globalLayout_), "M2 fixed global layout");
 
     VkDescriptorSetLayoutBinding binding{};
     binding.binding = 0;
@@ -335,21 +365,32 @@ std::size_t ForwardPass::materialSlot(const int materialIndex) const noexcept {
                : model_.materials().size();
 }
 
-void ForwardPass::createPipeline(const VkFormat colorFormat) {
+void ForwardPass::createInitialGpuState() {
     const auto shaderDirectory = std::filesystem::path(SHADERLAB_SHADER_DIR);
-    const VkShaderModule vertex = createShaderModule(device_, shaderDirectory / "fixed.vert.spv", "M1 fixed VS");
+    liveGpuState_ = buildGpuState(readSpirv(shaderDirectory / "fixed.frag.spv"), 0);
+}
+
+std::unique_ptr<material::GpuState> ForwardPass::buildGpuState(
+    const std::span<const std::uint32_t> fragmentSpirv, const std::uint64_t generation) const {
+    const auto shaderDirectory = std::filesystem::path(SHADERLAB_SHADER_DIR);
+    VkShaderModule vertex = VK_NULL_HANDLE;
     VkShaderModule fragment = VK_NULL_HANDLE;
+    VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+    VkPipeline pipeline = VK_NULL_HANDLE;
     try {
-        fragment = createShaderModule(device_, shaderDirectory / "fixed.frag.spv", "M1 fixed FS");
+        vertex = createShaderModule(device_, shaderDirectory / "fixed.vert.spv", "M2 fixed VS");
+        fragment = createShaderModule(device_, fragmentSpirv,
+                                      "M2 candidate FS generation " + std::to_string(generation));
         VkPushConstantRange pushRange{};
         pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
         pushRange.size = sizeof(DrawPushConstants);
+        const std::array descriptorLayouts{globalLayout_, materialLayout_};
         VkPipelineLayoutCreateInfo layoutInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-        layoutInfo.setLayoutCount = 1;
-        layoutInfo.pSetLayouts = &materialLayout_;
+        layoutInfo.setLayoutCount = static_cast<std::uint32_t>(descriptorLayouts.size());
+        layoutInfo.pSetLayouts = descriptorLayouts.data();
         layoutInfo.pushConstantRangeCount = 1;
         layoutInfo.pPushConstantRanges = &pushRange;
-        auto result = vkCreatePipelineLayout(device_.logicalDevice(), &layoutInfo, nullptr, &pipelineLayout_);
+        auto result = vkCreatePipelineLayout(device_.logicalDevice(), &layoutInfo, nullptr, &pipelineLayout);
         if (result != VK_SUCCESS) {
             throw std::runtime_error("vkCreatePipelineLayout failed with VkResult " + std::to_string(result));
         }
@@ -399,7 +440,7 @@ void ForwardPass::createPipeline(const VkFormat colorFormat) {
         dynamic.pDynamicStates = dynamicStates.data();
         VkPipelineRenderingCreateInfo rendering{VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
         rendering.colorAttachmentCount = 1;
-        rendering.pColorAttachmentFormats = &colorFormat;
+        rendering.pColorAttachmentFormats = &colorFormat_;
         rendering.depthAttachmentFormat = VK_FORMAT_D32_SFLOAT;
         VkGraphicsPipelineCreateInfo pipelineInfo{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
         pipelineInfo.pNext = &rendering;
@@ -413,42 +454,65 @@ void ForwardPass::createPipeline(const VkFormat colorFormat) {
         pipelineInfo.pDepthStencilState = &depth;
         pipelineInfo.pColorBlendState = &blend;
         pipelineInfo.pDynamicState = &dynamic;
-        pipelineInfo.layout = pipelineLayout_;
-        result = vkCreateGraphicsPipelines(device_.logicalDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline_);
+        pipelineInfo.layout = pipelineLayout;
+        result = vkCreateGraphicsPipelines(device_.logicalDevice(), VK_NULL_HANDLE, 1,
+                                           &pipelineInfo, nullptr, &pipeline);
         if (result != VK_SUCCESS) {
             throw std::runtime_error("vkCreateGraphicsPipelines failed with VkResult " + std::to_string(result));
         }
-        device_.setDebugName(VK_OBJECT_TYPE_PIPELINE_LAYOUT, reinterpret_cast<std::uint64_t>(pipelineLayout_),
-                             "M1 fixed pipeline layout");
-        device_.setDebugName(VK_OBJECT_TYPE_PIPELINE, reinterpret_cast<std::uint64_t>(pipeline_),
-                             "M1 fixed ForwardPass pipeline");
+        const std::string suffix = " generation " + std::to_string(generation);
+        device_.setDebugName(VK_OBJECT_TYPE_PIPELINE_LAYOUT, reinterpret_cast<std::uint64_t>(pipelineLayout),
+                             "M2 pipeline layout" + suffix);
+        device_.setDebugName(VK_OBJECT_TYPE_PIPELINE, reinterpret_cast<std::uint64_t>(pipeline),
+                             "M2 ForwardPass pipeline" + suffix);
+
+        auto state = std::make_unique<material::GpuState>(device_.logicalDevice(), pipelineLayout,
+                                                          pipeline, generation);
+        pipelineLayout = VK_NULL_HANDLE;
+        pipeline = VK_NULL_HANDLE;
+        vkDestroyShaderModule(device_.logicalDevice(), fragment, nullptr);
+        vkDestroyShaderModule(device_.logicalDevice(), vertex, nullptr);
+        return state;
     } catch (...) {
         if (fragment != VK_NULL_HANDLE) {
             vkDestroyShaderModule(device_.logicalDevice(), fragment, nullptr);
         }
-        vkDestroyShaderModule(device_.logicalDevice(), vertex, nullptr);
-        destroyPipeline();
+        if (vertex != VK_NULL_HANDLE) {
+            vkDestroyShaderModule(device_.logicalDevice(), vertex, nullptr);
+        }
+        if (pipeline != VK_NULL_HANDLE) {
+            vkDestroyPipeline(device_.logicalDevice(), pipeline, nullptr);
+        }
+        if (pipelineLayout != VK_NULL_HANDLE) {
+            vkDestroyPipelineLayout(device_.logicalDevice(), pipelineLayout, nullptr);
+        }
         throw;
     }
-    vkDestroyShaderModule(device_.logicalDevice(), fragment, nullptr);
-    vkDestroyShaderModule(device_.logicalDevice(), vertex, nullptr);
+}
+
+void ForwardPass::stageGpuState(std::unique_ptr<material::GpuState> state) {
+    if (!state || !state->valid()) {
+        throw std::invalid_argument("Cannot stage an invalid GPU state");
+    }
+    pendingGpuState_ = std::move(state);
+}
+
+std::uint64_t ForwardPass::commitPendingGpuState(const std::uint64_t currentFrame) {
+    if (!pendingGpuState_) {
+        return 0;
+    }
+    const std::uint64_t generation = pendingGpuState_->generation();
+    liveGpuState_->enqueueRetirement(device_.deletionQueue(), currentFrame);
+    std::swap(liveGpuState_, pendingGpuState_);
+    pendingGpuState_->disarm();
+    pendingGpuState_.reset();
+    return generation;
 }
 
 void ForwardPass::createDepth(const VkExtent2D extent) {
     depthImage_ = rhi::Image(device_, extent, VK_FORMAT_D32_SFLOAT,
                              VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
                              VK_IMAGE_ASPECT_DEPTH_BIT, "Forward depth");
-}
-
-void ForwardPass::destroyPipeline() noexcept {
-    if (pipeline_ != VK_NULL_HANDLE) {
-        vkDestroyPipeline(device_.logicalDevice(), pipeline_, nullptr);
-        pipeline_ = VK_NULL_HANDLE;
-    }
-    if (pipelineLayout_ != VK_NULL_HANDLE) {
-        vkDestroyPipelineLayout(device_.logicalDevice(), pipelineLayout_, nullptr);
-        pipelineLayout_ = VK_NULL_HANDLE;
-    }
 }
 
 void ForwardPass::destroyMaterials() noexcept {
@@ -460,6 +524,10 @@ void ForwardPass::destroyMaterials() noexcept {
     if (materialLayout_ != VK_NULL_HANDLE) {
         vkDestroyDescriptorSetLayout(device_.logicalDevice(), materialLayout_, nullptr);
         materialLayout_ = VK_NULL_HANDLE;
+    }
+    if (globalLayout_ != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(device_.logicalDevice(), globalLayout_, nullptr);
+        globalLayout_ = VK_NULL_HANDLE;
     }
     if (sampler_ != VK_NULL_HANDLE) {
         vkDestroySampler(device_.logicalDevice(), sampler_, nullptr);

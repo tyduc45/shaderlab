@@ -2,7 +2,7 @@
 
 ## 当前任务
 
-M1.7 交互响应改进已通过用户人工拖动验收，正在收口提交并推送。完成后恢复 M2.3b（双缓冲 GpuState、pipeline 创建与帧边界 swap）。M1、M2.1-M2.3a 已完成。
+M2.3b 双缓冲 GpuState、异步 pipeline 创建和帧边界 swap 已实现并验证。下一项是 M2.4：ImGui 编辑器外壳、可见 Compile 按钮、编译状态和 Console 面板。M1、M2.1-M2.3b 已完成。
 
 ## 不可破坏的不变式
 
@@ -18,7 +18,7 @@ M1.7 交互响应改进已通过用户人工拖动验收，正在收口提交并
 1. 阅读 `/doc/implementation_plan.md`、`/doc/progress.md`、本文件。
 2. 检查 `git status --short --branch` 和最近提交，绝不覆盖未知的用户改动。
 3. 从 `progress.md` 第一条非 DONE 项继续。
-4. M1.7 已获用户验收和推送授权；完成收口后从 M2.3b 继续。之后的功能点继续按用户当时的明确指令处理。
+4. M2.3b 收口后从 M2.4 继续；每个已验证功能点更新 `/doc`、提交并推送。
 
 ## 当前环境
 
@@ -38,6 +38,7 @@ M1.7 交互响应改进已通过用户人工拖动验收，正在收口提交并
 - M1.5 已用 Khronos DamagedHelmet 验证 glTF geometry：14556 vertices、46356 indices、1 submesh，4 帧退出码 0，validation VUID 0。
 - M1.6 已完成 baseColor texture/factor、白色 fallback、descriptor 和 transfer upload；目视验收通过，详见 `doc/m1_acceptance.md`。
 - M1.7 已将相机输入提前到 Vulkan 阻塞点之前，使用 GLFW 回调累积位移、拖动捕获/raw mouse 和约 20ms 半衰期平滑；构建、CTest、Vulkan smoke 与用户手感验收均通过，详见 `doc/input_responsiveness.md`。
+- M2.3b reload smoke 连续触发 10 代只应用 generation 10；generation 11 语法错误保持 live generation 10，详见 `doc/m2_gpu_state.md`。
 
 ## 已完成的 Vulkan 约束
 
@@ -60,9 +61,11 @@ M1.7 交互响应改进已通过用户人工拖动验收，正在收口提交并
 - `core::JobSystem` 捕获任务异常并继续工作；`ResultQueue<T>` 用于将 shader compile 结果带回主线程，主线程不得阻塞等待编译。
 - `shader::ShaderCompiler` 只产出 CPU SPIR-V 与结构化 diagnostics，不修改任何 live GPU 状态；`CompileResult::generation` 必须在主线程消费时与当前 generation 比较。
 - `shader::GenerationCounter` 已单测连续 10 次触发只接受第 10 代；M2.3 将它嵌入 material/runtime compile controller。
-- `ShaderReloadController::requestFile/requestSource` 已完成 worker 调度，`pollCurrent()` 是唯一主线程消费入口；M2.3b 不应绕过它直接读取 `ResultQueue`。
+- `ShaderReloadController::requestFile/requestSource` 是 CPU 编译结果的唯一主线程消费入口；当前成功 SPIR-V 再交给 Renderer 的单 GPU worker 构建候选。
 - Controller 成员声明为 `ResultQueue` 在前、`JobSystem` 在后，C++ 逆序析构使 JobSystem 先 join 全部 worker，再销毁结果队列；如重排成员必须重新审计生命周期。
-- `ForwardPass` 当前固定 build-time shaders 与单份 startup pipeline；M2 将用户 fragment 编译结果组织为双缓冲 `GpuState`，失败不能碰 live 状态。
+- `ForwardPass` 持有 `liveGpuState_`/`pendingGpuState_`；帧边界先安全排队旧 live 的延迟销毁，再原子 swap。不要把任何可能失败的 Vulkan 创建调用移入 swap 区间。
+- `GpuState` 当前拥有 pipeline layout + pipeline；M3 必须把随反射变化的 descriptor layout/pool/set/UBO 扩入同一原子状态，不可拆开切换。
+- 用户 fragment 位于 `assets/shaders/user/default.frag`，F5 触发异步编译；材质 descriptor 已从 set 0 迁到固定 set 1，set 0 当前为空布局占位。
 - `core::Log` 已能把 validation 与编译错误送往未来 ConsolePanel，也能在 smoke test 中通过 stderr 留证。
 - 固定 shader 位于 `assets/shaders/engine/`，只服务于 M1；M2 的用户 fragment shader 编译链不得复用构建期 glslc 状态。
 

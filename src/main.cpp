@@ -15,9 +15,21 @@
 
 namespace {
 
-bool smokeTestRequested() {
+bool environmentFlagRequested(const wchar_t* name) {
     wchar_t value[2]{};
-    return GetEnvironmentVariableW(L"SHADERLAB_SMOKE_TEST", value, 2) > 0;
+    return GetEnvironmentVariableW(name, value, 2) > 0;
+}
+
+bool smokeTestRequested() {
+    return environmentFlagRequested(L"SHADERLAB_SMOKE_TEST");
+}
+
+bool shaderReloadSmokeTestRequested() {
+    return environmentFlagRequested(L"SHADERLAB_RELOAD_SMOKE_TEST");
+}
+
+bool headlessTestRequested() {
+    return smokeTestRequested() || shaderReloadSmokeTestRequested();
 }
 
 std::filesystem::path requestedModelPath() {
@@ -54,7 +66,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             ~GlfwGuard() { glfwTerminate(); }
         } glfwGuard;
 
-        const bool smokeTest = smokeTestRequested();
+        const bool shaderReloadSmokeTest = shaderReloadSmokeTestRequested();
+        const bool smokeTest = headlessTestRequested();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
         glfwWindowHint(GLFW_VISIBLE, smokeTest ? GLFW_FALSE : GLFW_TRUE);
@@ -69,15 +82,47 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         shaderlab::rhi::Swapchain swapchain(device, window.get());
         shaderlab::render::Renderer renderer(device, swapchain, window.get(), requestedModelPath());
         if (smokeTest) {
+            std::uint64_t expectedShaderGeneration = 0;
+            if (shaderReloadSmokeTest) {
+                for (int reload = 0; reload < 10; ++reload) {
+                    expectedShaderGeneration = renderer.requestShaderReload();
+                }
+                renderer.waitForShaderReload();
+            }
             for (int frame = 0; frame < 4; ++frame) {
                 renderer.drawFrame();
             }
             device.waitIdle();
+            if (shaderReloadSmokeTest &&
+                renderer.lastAppliedShaderGeneration() != expectedShaderGeneration) {
+                throw std::runtime_error("Latest shader generation was not applied");
+            }
+            if (shaderReloadSmokeTest) {
+                constexpr const char* invalidSource =
+                    "#version 460\nlayout(location=0) out vec4 color; void main(){ color=vec4(; }";
+                static_cast<void>(renderer.requestShaderSource("reload_failure.frag", invalidSource));
+                renderer.waitForShaderReload();
+                for (int frame = 0; frame < 4; ++frame) {
+                    renderer.drawFrame();
+                }
+                device.waitIdle();
+                if (renderer.lastAppliedShaderGeneration() != expectedShaderGeneration) {
+                    throw std::runtime_error("Failed shader compilation replaced the live GPU state");
+                }
+            }
             const auto messages = Log::instance().snapshot();
-            const bool hasError = std::ranges::any_of(messages, [](const auto& message) {
-                return message.level == LogLevel::Error;
+            const bool hasExpectedCompileError = std::ranges::any_of(messages, [](const auto& message) {
+                return message.level == LogLevel::Error &&
+                       message.text.find("reload_failure.frag:2") != std::string::npos;
             });
-            if (hasError) {
+            const bool hasUnexpectedError = std::ranges::any_of(messages, [shaderReloadSmokeTest](const auto& message) {
+                if (message.level != LogLevel::Error) {
+                    return false;
+                }
+                return !shaderReloadSmokeTest ||
+                       message.text.find("reload_failure.frag:2") == std::string::npos;
+            });
+            if (hasUnexpectedError || (shaderReloadSmokeTest && !hasExpectedCompileError)) {
                 throw std::runtime_error("Vulkan smoke test received an error-level validation message");
             }
             return 0;
@@ -90,7 +135,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         return 0;
     } catch (const std::exception& error) {
         Log::instance().write(LogLevel::Error, error.what());
-        if (!smokeTestRequested()) {
+        if (!headlessTestRequested()) {
             MessageBoxA(nullptr, error.what(), "ShaderLab fatal error", MB_OK | MB_ICONERROR);
         }
         return 1;

@@ -1,5 +1,6 @@
 #include "render/Renderer.h"
 
+#include "core/Log.h"
 #include "render/passes/ForwardPass.h"
 
 #include "rhi/Device.h"
@@ -9,6 +10,7 @@
 
 #include <array>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 
@@ -32,18 +34,24 @@ Renderer::Renderer(rhi::Device& device, rhi::Swapchain& swapchain, GLFWwindow* w
     createFrameContexts();
     createPresentSemaphores();
     forwardPass_ = std::make_unique<ForwardPass>(device_, swapchain_, modelPath);
+    userFragmentPath_ = std::filesystem::path(SHADERLAB_SOURCE_DIR) /
+                        "assets/shaders/user/default.frag";
     camera_.frame(forwardPass_->bounds());
     glfwSetWindowUserPointer(window_, this);
     glfwSetCursorPosCallback(window_, cursorPositionCallback);
     glfwSetMouseButtonCallback(window_, mouseButtonCallback);
+    glfwSetKeyCallback(window_, keyCallback);
     lastFrameTime_ = glfwGetTime();
 }
 
 Renderer::~Renderer() {
+    shaderReloads_.waitIdle();
+    gpuBuildJobs_.waitIdle();
     device_.waitIdle();
     camera_.releaseInput(window_);
     glfwSetCursorPosCallback(window_, nullptr);
     glfwSetMouseButtonCallback(window_, nullptr);
+    glfwSetKeyCallback(window_, nullptr);
     glfwSetWindowUserPointer(window_, nullptr);
     forwardPass_.reset();
     destroyPresentSemaphores();
@@ -56,6 +64,12 @@ void Renderer::drawFrame() {
     lastFrameTime_ = now;
 
     device_.deletionQueue().flush(frameNumber_);
+    processShaderReloads();
+    if (const std::uint64_t generation = forwardPass_->commitPendingGpuState(frameNumber_); generation != 0) {
+        lastAppliedShaderGeneration_ = generation;
+        core::Log::instance().write(core::LogLevel::Info,
+                                    "Applied shader generation " + std::to_string(generation));
+    }
     if (swapchain_.framebufferExtentChanged()) {
         recreateSwapchain();
     }
@@ -124,6 +138,98 @@ void Renderer::drawFrame() {
 
     frameIndex_ = (frameIndex_ + 1) % FramesInFlight;
     ++frameNumber_;
+}
+
+std::uint64_t Renderer::requestShaderReload() {
+    const std::uint64_t generation = shaderReloads_.requestFile(userFragmentPath_);
+    core::Log::instance().write(core::LogLevel::Info,
+                                "Queued shader generation " + std::to_string(generation));
+    return generation;
+}
+
+std::uint64_t Renderer::requestShaderSource(std::filesystem::path sourcePath, std::string source) {
+    const std::uint64_t generation = shaderReloads_.requestSource(std::move(sourcePath), std::move(source));
+    core::Log::instance().write(core::LogLevel::Info,
+                                "Queued shader generation " + std::to_string(generation));
+    return generation;
+}
+
+void Renderer::waitForShaderReload() {
+    shaderReloads_.waitIdle();
+    processShaderReloads();
+    gpuBuildJobs_.waitIdle();
+    processShaderReloads();
+}
+
+bool Renderer::shaderReloadInFlight() const noexcept {
+    return shaderReloads_.inFlight() || gpuBuildsInFlight_ != 0;
+}
+
+void Renderer::processShaderReloads() {
+    if (auto compile = shaderReloads_.pollCurrent()) {
+        if (!compile->success) {
+            logCompileFailure(*compile);
+        } else {
+            const std::uint64_t generation = compile->generation;
+            auto spirv = std::move(compile->spirv);
+            ForwardPass* const pass = forwardPass_.get();
+            ++gpuBuildsInFlight_;
+            try {
+                gpuBuildJobs_.submit([this, pass, generation, spirv = std::move(spirv)] {
+                    GpuBuildResult result;
+                    result.generation = generation;
+                    try {
+                        result.state = pass->buildGpuState(spirv, generation);
+                    } catch (const std::exception& error) {
+                        result.error = error.what();
+                    } catch (...) {
+                        result.error = "Unknown pipeline creation failure";
+                    }
+                    gpuBuildResults_.push(std::move(result));
+                });
+            } catch (...) {
+                --gpuBuildsInFlight_;
+                throw;
+            }
+        }
+    }
+
+    while (auto result = gpuBuildResults_.tryPop()) {
+        if (gpuBuildsInFlight_ != 0) {
+            --gpuBuildsInFlight_;
+        }
+        if (result->generation != shaderReloads_.generation()) {
+            continue;
+        }
+        if (!result->state) {
+            core::Log::instance().write(core::LogLevel::Error,
+                                        "Shader generation " + std::to_string(result->generation) +
+                                            " pipeline creation failed: " + result->error);
+            continue;
+        }
+        forwardPass_->stageGpuState(std::move(result->state));
+    }
+}
+
+void Renderer::logCompileFailure(const shader::CompileResult& result) {
+    if (result.errors.empty()) {
+        core::Log::instance().write(core::LogLevel::Error,
+                                    "Shader generation " + std::to_string(result.generation) +
+                                        " compilation failed: " + result.diagnostics);
+        return;
+    }
+    for (const auto& error : result.errors) {
+        std::ostringstream message;
+        message << error.path.string();
+        if (error.line != 0) {
+            message << ':' << error.line;
+            if (error.column != 0) {
+                message << ':' << error.column;
+            }
+        }
+        message << ": " << error.message;
+        core::Log::instance().write(core::LogLevel::Error, message.str());
+    }
 }
 
 void Renderer::createFrameContexts() {
@@ -201,6 +307,18 @@ void Renderer::mouseButtonCallback(GLFWwindow* window, const int button, const i
     static_cast<void>(modifiers);
     if (auto* renderer = static_cast<Renderer*>(glfwGetWindowUserPointer(window)); renderer != nullptr) {
         renderer->camera_.onMouseButton(window, button, action);
+    }
+}
+
+void Renderer::keyCallback(GLFWwindow* window, const int key, const int scanCode,
+                           const int action, const int modifiers) {
+    static_cast<void>(scanCode);
+    static_cast<void>(modifiers);
+    if (key != GLFW_KEY_F5 || action != GLFW_PRESS) {
+        return;
+    }
+    if (auto* renderer = static_cast<Renderer*>(glfwGetWindowUserPointer(window)); renderer != nullptr) {
+        static_cast<void>(renderer->requestShaderReload());
     }
 }
 

@@ -64,3 +64,21 @@ DamagedHelmet baseColor 纹理与 UV 在 1280×720 screenshot layer 输出中目
 ### 验证
 
 Debug `/W4 /WX` 构建、CTest 1/1 和 4 帧 Vulkan smoke test 均通过；用户随后确认鼠标手感验收成功并授权推送。
+
+## 2026-08-15 — GPU 候选在 worker 构建，帧边界只交换所有权
+
+### 背景
+
+只有 CPU SPIR-V 异步编译不足以保证热重载流畅和失败安全；`vkCreatePipelineLayout`、`vkCreateGraphicsPipelines` 也可能耗时或被驱动拒绝。与此同时，旧 pipeline 可能仍被 in-flight command buffer 使用，不能在 swap 后立即销毁。
+
+### 决策
+
+- `ShaderReloadController` 继续负责文件 I/O、shaderc 和第一层 generation 过滤。
+- 当前 generation 的 SPIR-V 交给独立单 worker 创建完整 `GpuState` 候选；GPU 结果回主线程时再次检查 generation。
+- `liveGpuState_` 永远有效，成功候选才进入 `pendingGpuState_`；主线程帧边界执行一次不抛异常的 `unique_ptr` swap。
+- 交换前先把旧 live 的销毁闭包成功写入 `DeletionQueue`，交换后 disarm 旧 RAII 对象；这样队列分配失败也发生在 live 状态改变之前。
+- M2 descriptor ABI 固定为预留 set 0 和材质 set 1。M3 反射变化时，descriptor layout/pool/set 将扩展进同一 `GpuState` 原子组。
+
+### 验证
+
+实际 Vulkan smoke 连续触发 10 代只应用第 10 代；语法错误的第 11 代没有创建 pending、没有替换 live。继续渲染和延迟销毁期间 validation 无非预期错误。
