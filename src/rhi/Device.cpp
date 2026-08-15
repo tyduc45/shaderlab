@@ -39,12 +39,12 @@ VkDebugUtilsMessengerCreateInfoEXT debugMessengerCreateInfo() {
                        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
                        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     info.pfnUserCallback = [](const VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-                              VkDebugUtilsMessageTypeFlagsEXT,
+                              const VkDebugUtilsMessageTypeFlagsEXT type,
                               const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
                               void*) -> VkBool32 {
-        const auto level = severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT
-                               ? LogLevel::Error
-                               : LogLevel::Validation;
+        const bool validationError = severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT &&
+                                     (type & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) != 0U;
+        const auto level = validationError ? LogLevel::Error : LogLevel::Validation;
         Log::instance().write(level, callbackData != nullptr && callbackData->pMessage != nullptr
                                         ? callbackData->pMessage
                                         : "Vulkan validation message without text");
@@ -304,7 +304,6 @@ void Device::createAllocator() {
     functions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
 
     VmaAllocatorCreateInfo createInfo{};
-    createInfo.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
     createInfo.vulkanApiVersion = VK_API_VERSION_1_4;
     createInfo.physicalDevice = physicalDevice_;
     createInfo.device = device_;
@@ -368,4 +367,3 @@ void Device::destroy() noexcept {
 }
 
 } // namespace shaderlab::rhi
-

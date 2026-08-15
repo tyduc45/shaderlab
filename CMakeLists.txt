@@ -18,10 +18,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+option(SHADERLAB_ASAN "Build ShaderLab with MSVC AddressSanitizer" OFF)
 
 find_package(Vulkan 1.4 REQUIRED)
 find_package(volk CONFIG REQUIRED)
-find_package(VulkanMemoryAllocator CONFIG REQUIRED)
+find_path(VMA_INCLUDE_DIR "vk_mem_alloc.h" PATH_SUFFIXES vma REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_path(TINYGLTF_INCLUDE_DIRS "tiny_gltf.h" REQUIRED)
@@ -38,16 +39,47 @@ add_executable(shaderlab WIN32
     src/core/Log.h
     src/rhi/Device.cpp
     src/rhi/Device.h
+    src/rhi/Buffer.cpp
+    src/rhi/Buffer.h
+    src/rhi/Image.cpp
+    src/rhi/Image.h
     src/rhi/Swapchain.cpp
     src/rhi/Swapchain.h
     src/render/Renderer.cpp
     src/render/Renderer.h
+    src/render/passes/ForwardPass.cpp
+    src/render/passes/ForwardPass.h
 )
+
+set(SHADER_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/shaders")
+set(FIXED_SHADER_SOURCES
+    assets/shaders/engine/fixed.vert
+    assets/shaders/engine/fixed.frag
+)
+set(FIXED_SHADER_OUTPUTS)
+foreach(SHADER_SOURCE IN LISTS FIXED_SHADER_SOURCES)
+    get_filename_component(SHADER_NAME "${SHADER_SOURCE}" NAME)
+    set(SHADER_OUTPUT "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv")
+    add_custom_command(
+        OUTPUT "${SHADER_OUTPUT}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${SHADER_OUTPUT_DIR}"
+        COMMAND "${Vulkan_GLSLC_EXECUTABLE}" --target-env=vulkan1.4 -O
+                "${CMAKE_CURRENT_SOURCE_DIR}/${SHADER_SOURCE}" -o "${SHADER_OUTPUT}"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${SHADER_SOURCE}"
+        VERBATIM
+    )
+    list(APPEND FIXED_SHADER_OUTPUTS "${SHADER_OUTPUT}")
+endforeach()
+add_custom_target(shaderlab_fixed_shaders DEPENDS ${FIXED_SHADER_OUTPUTS})
+add_dependencies(shaderlab shaderlab_fixed_shaders)
 
 target_compile_definitions(shaderlab PRIVATE
     GLFW_INCLUDE_NONE
     VK_NO_PROTOTYPES
+    GLM_FORCE_DEPTH_ZERO_TO_ONE
+    GLM_FORCE_RADIANS
     VULKAN_HPP_NO_CONSTRUCTORS
+    SHADERLAB_SHADER_DIR="${SHADER_OUTPUT_DIR}"
     $<$<CONFIG:Debug>:SHADERLAB_ENABLE_VALIDATION=1>
     $<$<NOT:$<CONFIG:Debug>>:SHADERLAB_ENABLE_VALIDATION=0>
 )
@@ -59,17 +91,21 @@ target_compile_options(shaderlab PRIVATE
     /Zc:__cplusplus
     /utf-8
 )
+if(SHADERLAB_ASAN)
+    target_compile_options(shaderlab PRIVATE /fsanitize=address /Zi)
+    target_link_options(shaderlab PRIVATE /INCREMENTAL:NO)
+endif()
 
 target_include_directories(shaderlab PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${Stb_INCLUDE_DIR}
     ${TINYGLTF_INCLUDE_DIRS}
+    ${VMA_INCLUDE_DIR}
 )
 
 target_link_libraries(shaderlab PRIVATE
-    Vulkan::Vulkan
+    Vulkan::Headers
     volk::volk
-    GPUOpen::VulkanMemoryAllocator
     glfw
     glm::glm
     nlohmann_json::nlohmann_json

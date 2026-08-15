@@ -23,6 +23,12 @@ void Log::write(const LogLevel level, const std::string_view message) {
     std::string debuggerLine = entry.text;
     debuggerLine.push_back('\n');
     OutputDebugStringA(debuggerLine.c_str());
+    const HANDLE standardError = GetStdHandle(STD_ERROR_HANDLE);
+    if (standardError != nullptr && standardError != INVALID_HANDLE_VALUE) {
+        DWORD written = 0;
+        static_cast<void>(WriteFile(standardError, debuggerLine.data(),
+                                    static_cast<DWORD>(debuggerLine.size()), &written, nullptr));
+    }
     if (sink) {
         sink(entry);
     }
@@ -39,4 +45,3 @@ std::vector<LogMessage> Log::snapshot() const {
 }
 
 } // namespace shaderlab::core
-

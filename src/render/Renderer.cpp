@@ -1,12 +1,14 @@
 #include "render/Renderer.h"
 
+#include "render/passes/ForwardPass.h"
+
 #include "rhi/Device.h"
 #include "rhi/Swapchain.h"
 
 #include <GLFW/glfw3.h>
 
 #include <array>
-#include <cmath>
+#include <memory>
 #include <stdexcept>
 #include <string>
 
@@ -27,16 +29,20 @@ Renderer::Renderer(rhi::Device& device, rhi::Swapchain& swapchain, GLFWwindow* w
         throw std::invalid_argument("Renderer requires a valid GLFW window");
     }
     createFrameContexts();
+    createPresentSemaphores();
+    forwardPass_ = std::make_unique<ForwardPass>(device_, swapchain_);
 }
 
 Renderer::~Renderer() {
     device_.waitIdle();
+    forwardPass_.reset();
+    destroyPresentSemaphores();
     destroyFrameContexts();
 }
 
 void Renderer::drawFrame() {
     if (swapchain_.framebufferExtentChanged()) {
-        swapchain_.recreate();
+        recreateSwapchain();
     }
 
     auto& frame = frames_[frameIndex_];
@@ -46,7 +52,7 @@ void Renderer::drawFrame() {
     const auto acquireResult = vkAcquireNextImageKHR(device_.logicalDevice(), swapchain_.handle(),
                                                       UINT64_MAX, frame.imageAvailable, VK_NULL_HANDLE, &imageIndex);
     if (acquireResult == VK_ERROR_OUT_OF_DATE_KHR) {
-        swapchain_.recreate();
+        recreateSwapchain();
         return;
     }
     if (acquireResult != VK_SUCCESS && acquireResult != VK_SUBOPTIMAL_KHR) {
@@ -57,7 +63,7 @@ void Renderer::drawFrame() {
     VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     check(vkBeginCommandBuffer(frame.commandBuffer, &beginInfo), "vkBeginCommandBuffer");
-    recordClear(frame.commandBuffer, imageIndex);
+    recordFrame(frame.commandBuffer, imageIndex);
     check(vkEndCommandBuffer(frame.commandBuffer), "vkEndCommandBuffer");
 
     VkSemaphoreSubmitInfo waitInfo{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
@@ -68,7 +74,7 @@ void Renderer::drawFrame() {
     commandInfo.commandBuffer = frame.commandBuffer;
 
     VkSemaphoreSubmitInfo renderFinishedInfo{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
-    renderFinishedInfo.semaphore = frame.renderFinished;
+    renderFinishedInfo.semaphore = presentReady_.at(imageIndex);
     renderFinishedInfo.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
 
     frame.timelineValue = nextTimelineValue_++;
@@ -90,13 +96,13 @@ void Renderer::drawFrame() {
     const VkSwapchainKHR swapchain = swapchain_.handle();
     VkPresentInfoKHR presentInfo{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = &frame.renderFinished;
+    presentInfo.pWaitSemaphores = &presentReady_.at(imageIndex);
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = &swapchain;
     presentInfo.pImageIndices = &imageIndex;
     const auto presentResult = vkQueuePresentKHR(device_.presentQueue(), &presentInfo);
     if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR || acquireResult == VK_SUBOPTIMAL_KHR) {
-        swapchain_.recreate();
+        recreateSwapchain();
     } else {
         check(presentResult, "vkQueuePresentKHR");
     }
@@ -122,8 +128,6 @@ void Renderer::createFrameContexts() {
         VkSemaphoreCreateInfo semaphoreInfo{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
         check(vkCreateSemaphore(device_.logicalDevice(), &semaphoreInfo, nullptr, &frame.imageAvailable),
               "vkCreateSemaphore(image available)");
-        check(vkCreateSemaphore(device_.logicalDevice(), &semaphoreInfo, nullptr, &frame.renderFinished),
-              "vkCreateSemaphore(render finished)");
 
         device_.setDebugName(VK_OBJECT_TYPE_COMMAND_POOL, reinterpret_cast<std::uint64_t>(frame.commandPool),
                              "Frame command pool " + std::to_string(index));
@@ -131,16 +135,11 @@ void Renderer::createFrameContexts() {
                              "Frame command buffer " + std::to_string(index));
         device_.setDebugName(VK_OBJECT_TYPE_SEMAPHORE, reinterpret_cast<std::uint64_t>(frame.imageAvailable),
                              "Image available " + std::to_string(index));
-        device_.setDebugName(VK_OBJECT_TYPE_SEMAPHORE, reinterpret_cast<std::uint64_t>(frame.renderFinished),
-                             "Render finished " + std::to_string(index));
     }
 }
 
 void Renderer::destroyFrameContexts() noexcept {
     for (auto& frame : frames_) {
-        if (frame.renderFinished != VK_NULL_HANDLE) {
-            vkDestroySemaphore(device_.logicalDevice(), frame.renderFinished, nullptr);
-        }
         if (frame.imageAvailable != VK_NULL_HANDLE) {
             vkDestroySemaphore(device_.logicalDevice(), frame.imageAvailable, nullptr);
         }
@@ -151,51 +150,29 @@ void Renderer::destroyFrameContexts() noexcept {
     }
 }
 
-void Renderer::recordClear(const VkCommandBuffer commandBuffer, const std::uint32_t imageIndex) const {
-    VkImageMemoryBarrier2 toColor{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
-    toColor.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
-    toColor.srcAccessMask = VK_ACCESS_2_NONE;
-    toColor.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    toColor.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-    toColor.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    toColor.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    toColor.image = swapchain_.image(imageIndex);
-    toColor.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    toColor.subresourceRange.levelCount = 1;
-    toColor.subresourceRange.layerCount = 1;
-    VkDependencyInfo dependency{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-    dependency.imageMemoryBarrierCount = 1;
-    dependency.pImageMemoryBarriers = &toColor;
-    vkCmdPipelineBarrier2(commandBuffer, &dependency);
+void Renderer::createPresentSemaphores() {
+    presentReady_.resize(swapchain_.imageCount(), VK_NULL_HANDLE);
+    VkSemaphoreCreateInfo semaphoreInfo{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+    for (std::size_t index = 0; index < presentReady_.size(); ++index) {
+        check(vkCreateSemaphore(device_.logicalDevice(), &semaphoreInfo, nullptr, &presentReady_[index]),
+              "vkCreateSemaphore(present ready)");
+        device_.setDebugName(VK_OBJECT_TYPE_SEMAPHORE, reinterpret_cast<std::uint64_t>(presentReady_[index]),
+                             "Present ready for swapchain image " + std::to_string(index));
+    }
+}
 
-    const double time = glfwGetTime();
-    const float pulse = static_cast<float>(0.5 + 0.5 * std::sin(time * 0.75));
-    VkRenderingAttachmentInfo colorAttachment{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
-    colorAttachment.imageView = swapchain_.imageView(imageIndex);
-    colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.clearValue.color = {{0.025F + pulse * 0.025F, 0.035F, 0.075F + pulse * 0.05F, 1.0F}};
+void Renderer::destroyPresentSemaphores() noexcept {
+    for (const auto semaphore : presentReady_) {
+        if (semaphore != VK_NULL_HANDLE) {
+            vkDestroySemaphore(device_.logicalDevice(), semaphore, nullptr);
+        }
+    }
+    presentReady_.clear();
+}
 
-    VkRenderingInfo renderingInfo{VK_STRUCTURE_TYPE_RENDERING_INFO};
-    renderingInfo.renderArea.extent = swapchain_.extent();
-    renderingInfo.layerCount = 1;
-    renderingInfo.colorAttachmentCount = 1;
-    renderingInfo.pColorAttachments = &colorAttachment;
-    vkCmdBeginRendering(commandBuffer, &renderingInfo);
-    vkCmdEndRendering(commandBuffer);
-
-    VkImageMemoryBarrier2 toPresent{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
-    toPresent.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    toPresent.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-    toPresent.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
-    toPresent.dstAccessMask = VK_ACCESS_2_NONE;
-    toPresent.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    toPresent.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    toPresent.image = swapchain_.image(imageIndex);
-    toPresent.subresourceRange = toColor.subresourceRange;
-    dependency.pImageMemoryBarriers = &toPresent;
-    vkCmdPipelineBarrier2(commandBuffer, &dependency);
+void Renderer::recordFrame(const VkCommandBuffer commandBuffer, const std::uint32_t imageIndex) const {
+    forwardPass_->record(commandBuffer, swapchain_.image(imageIndex), swapchain_.imageView(imageIndex),
+                         swapchain_.extent(), glfwGetTime());
 }
 
 void Renderer::waitForFrame(const FrameContext& frame) const {
@@ -210,5 +187,13 @@ void Renderer::waitForFrame(const FrameContext& frame) const {
     check(vkWaitSemaphores(device_.logicalDevice(), &waitInfo, UINT64_MAX), "vkWaitSemaphores(frame timeline)");
 }
 
-} // namespace shaderlab::render
+void Renderer::recreateSwapchain() {
+    swapchain_.recreate();
+    if (glfwWindowShouldClose(window_) == GLFW_FALSE) {
+        destroyPresentSemaphores();
+        createPresentSemaphores();
+        forwardPass_->resize(swapchain_.extent());
+    }
+}
 
+} // namespace shaderlab::render

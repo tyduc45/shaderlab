@@ -15,7 +15,8 @@
 | 2026-08-15 | M1.1 | DONE | CMake/vcpkg/MSVC 工程与依赖骨架 | CMake 配置成功；Debug 编译成功；CTest 1/1 通过 |
 | 2026-08-15 | M1.2 | DONE | Vulkan 1.4 instance/device/VMA/timeline/debug utils | Debug 构建成功；隐藏窗口 Vulkan smoke test 退出码 0；CTest 1/1 通过 |
 | 2026-08-15 | M1.3 | DONE | Swapchain、dynamic rendering 与 synchronization2 帧循环 | Debug 构建成功；4 帧呈现 smoke test 退出码 0 且无 error-level validation 消息；CTest 1/1 通过 |
-| 2026-08-15 | M1.4 | DOING | VMA Buffer/Image、固定 shader 与 ForwardPass | 正在实现 |
+| 2026-08-15 | M1.4 | DONE | VMA Buffer/Image、固定 shader 与 ForwardPass | Debug `/W4 /WX` 构建成功；4 帧索引绘制退出码 0；validation VUID 0；CTest 1/1 通过 |
+| 2026-08-15 | M1.5 | DOING | glTF 2.0 模型加载与轨道相机 | 正在实现 |
 | 2026-08-15 | M2 | TODO | 热重载骨架 | 未开始 |
 | 2026-08-15 | M3 | TODO | 反射参数系统 | 未开始 |
 | 2026-08-15 | M4 | TODO | Include 依赖图 | 未开始 |
@@ -36,6 +37,8 @@
 - Debug 构建强制 validation layer，把 validation 消息接入核心日志；创建 timeline semaphore 和 VMA allocator，并为 Vulkan 对象提供 debug name 接口。
 - 实现 swapchain 格式/呈现模式选择与 resize/out-of-date 重建；采用每帧独立 command pool、binary acquire/present semaphore 和共享 timeline semaphore。
 - 清屏帧完整使用 synchronization2 barrier 与 dynamic rendering，不创建 `VkRenderPass` 或 `VkFramebuffer`。
+- 新增 VMA `Buffer`/`Image` RAII、D32 depth、构建期固定 shader 编译和 dynamic-rendering ForwardPass；当前用彩色索引立方体验证完整 graphics pipeline。
+- smoke test 实际发现并修复两处底层问题：本地 Debug Vulkan loader 覆盖系统 loader；present binary semaphore 按 frame slot 过早复用。详见 `doc/decisions.md`。
 
 ## 验证命令
 

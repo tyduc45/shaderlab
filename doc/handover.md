@@ -2,7 +2,7 @@
 
 ## 当前任务
 
-M1.4：实现 VMA Buffer/Image、固定 shader 与 ForwardPass。M1.1-M1.3 已完成。
+M1.5：实现 glTF 2.0 模型加载与轨道相机。M1.1-M1.4 已完成。
 
 ## 不可破坏的不变式
 
@@ -34,6 +34,7 @@ M1.4：实现 VMA Buffer/Image、固定 shader 与 ForwardPass。M1.1-M1.3 已�
 - `ctest --preset debug`：1/1 通过。
 - `SHADERLAB_SMOKE_TEST=1` 运行 Debug 应用：退出码 0，已验证本机 Vulkan 1.4 device、surface、timeline semaphore 与 VMA 初始化/清理。
 - 当前 smoke test 会隐藏窗口连续提交/呈现 4 帧；使用 dynamic rendering 与 synchronization2，任何 error-level validation 回调都会使进程失败。
+- M1.4 smoke test 已实际提交固定 ForwardPass 的 indexed cube，退出码 0，validation VUID 0。
 
 ## 已完成的 Vulkan 约束
 
@@ -49,3 +50,9 @@ M1.4：实现 VMA Buffer/Image、固定 shader 与 ForwardPass。M1.1-M1.3 已�
 - acquire/present 仍使用 binary semaphore，这是 WSI 契约；GPU 帧节流使用 timeline semaphore。
 - swapchain image 通过 synchronization2 在 `UNDEFINED → COLOR_ATTACHMENT_OPTIMAL → PRESENT_SRC_KHR` 间转换。
 - resize/out-of-date 当前使用 `device.waitIdle()` 后整体重建；这是 M1 最简单且正确的编辑器路径，后续无需改动渲染 ABI。
+
+## 下一步接入点
+
+- `ForwardPass::createGeometry()` 中的硬编码 cube 是 M1.4 的受控临时输入；M1.5 用 `scene::ModelAsset` 的 glTF submesh buffers 替换。
+- `ForwardPass::record()` 当前自己生成相机矩阵；M1.5 将其改为接收轨道相机的 view/projection。
+- 固定 shader 位于 `assets/shaders/engine/`，只服务于 M1；M2 的用户 fragment shader 编译链不得复用构建期 glslc 状态。

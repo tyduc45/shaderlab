@@ -24,6 +24,7 @@ public:
     [[nodiscard]] VkSwapchainKHR handle() const noexcept { return swapchain_; }
     [[nodiscard]] VkFormat format() const noexcept { return format_; }
     [[nodiscard]] VkExtent2D extent() const noexcept { return extent_; }
+    [[nodiscard]] std::size_t imageCount() const noexcept { return images_.size(); }
     [[nodiscard]] VkImage image(const std::uint32_t index) const { return images_.at(index); }
     [[nodiscard]] VkImageView imageView(const std::uint32_t index) const { return imageViews_.at(index); }
 
@@ -41,4 +42,3 @@ private:
 };
 
 } // namespace shaderlab::rhi
-

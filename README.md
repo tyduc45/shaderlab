@@ -29,9 +29,10 @@ Remove-Item Env:SHADERLAB_SMOKE_TEST
 
 Dependencies are pinned through the `builtin-baseline` in `vcpkg.json`. Build outputs and the manifest-mode installed tree remain local and are ignored by Git.
 
+`SHADERLAB_ASAN=ON` is available as a CMake cache option for MSVC AddressSanitizer diagnostics.
+
 ## Documentation
 
 - [`doc/implementation_plan.md`](doc/implementation_plan.md): milestone scope and commit policy
 - [`doc/progress.md`](doc/progress.md): verified progress and evidence
 - [`doc/handover.md`](doc/handover.md): continuation notes and invariants
-

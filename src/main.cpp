@@ -74,7 +74,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         return 0;
     } catch (const std::exception& error) {
         Log::instance().write(LogLevel::Error, error.what());
-        MessageBoxA(nullptr, error.what(), "ShaderLab fatal error", MB_OK | MB_ICONERROR);
+        if (!smokeTestRequested()) {
+            MessageBoxA(nullptr, error.what(), "ShaderLab fatal error", MB_OK | MB_ICONERROR);
+        }
         return 1;
     }
 }
