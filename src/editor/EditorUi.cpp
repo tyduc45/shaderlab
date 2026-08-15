@@ -136,7 +136,7 @@ EditorUi::~EditorUi() {
 }
 
 bool EditorUi::beginFrame(const bool compileInFlight, const std::uint64_t currentGeneration,
-                          const std::uint64_t liveGeneration) {
+                          const std::uint64_t liveGeneration, const double lastReloadMilliseconds) {
     ImGui::SetCurrentContext(context_);
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
@@ -154,6 +154,9 @@ bool EditorUi::beginFrame(const bool compileInFlight, const std::uint64_t curren
         ImGui::Text("Ready (live generation %llu)", static_cast<unsigned long long>(liveGeneration));
     }
     ImGui::Text("Latest request: %llu", static_cast<unsigned long long>(currentGeneration));
+    if (lastReloadMilliseconds > 0.0) {
+        ImGui::Text("Last reload: %.1f ms", lastReloadMilliseconds);
+    }
     ImGui::TextWrapped("Edit assets/shaders/user/default.frag, then compile.");
     ImGui::End();
 

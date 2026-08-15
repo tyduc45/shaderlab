@@ -14,7 +14,7 @@ CompileResult ShaderCompiler::compileFragment(const CompileRequest& request) con
     result.generation = request.generation;
     result.pass = request.pass;
 
-    shaderc::Compiler compiler;
+    thread_local shaderc::Compiler compiler;
     shaderc::CompileOptions options;
     options.SetSourceLanguage(shaderc_source_language_glsl);
     options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_4);

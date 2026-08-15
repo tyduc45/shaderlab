@@ -28,8 +28,12 @@ bool shaderReloadSmokeTestRequested() {
     return environmentFlagRequested(L"SHADERLAB_RELOAD_SMOKE_TEST");
 }
 
+bool shaderReloadStressTestRequested() {
+    return environmentFlagRequested(L"SHADERLAB_RELOAD_STRESS_TEST");
+}
+
 bool headlessTestRequested() {
-    return smokeTestRequested() || shaderReloadSmokeTestRequested();
+    return smokeTestRequested() || shaderReloadSmokeTestRequested() || shaderReloadStressTestRequested();
 }
 
 std::filesystem::path requestedModelPath() {
@@ -67,6 +71,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         } glfwGuard;
 
         const bool shaderReloadSmokeTest = shaderReloadSmokeTestRequested();
+        const bool shaderReloadStressTest = shaderReloadStressTestRequested();
         const bool smokeTest = headlessTestRequested();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
@@ -83,7 +88,16 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         shaderlab::render::Renderer renderer(device, swapchain, window.get(), requestedModelPath());
         if (smokeTest) {
             std::uint64_t expectedShaderGeneration = 0;
-            if (shaderReloadSmokeTest) {
+            if (shaderReloadStressTest) {
+                for (int reload = 0; reload < 100; ++reload) {
+                    expectedShaderGeneration = renderer.requestShaderReload();
+                    renderer.waitForShaderReload();
+                    renderer.drawFrame();
+                    if (renderer.lastAppliedShaderGeneration() != expectedShaderGeneration) {
+                        throw std::runtime_error("Sequential shader generation was not applied");
+                    }
+                }
+            } else if (shaderReloadSmokeTest) {
                 for (int reload = 0; reload < 10; ++reload) {
                     expectedShaderGeneration = renderer.requestShaderReload();
                 }
@@ -93,7 +107,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 renderer.drawFrame();
             }
             device.waitIdle();
-            if (shaderReloadSmokeTest &&
+            if ((shaderReloadSmokeTest || shaderReloadStressTest) &&
                 renderer.lastAppliedShaderGeneration() != expectedShaderGeneration) {
                 throw std::runtime_error("Latest shader generation was not applied");
             }
@@ -109,6 +123,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 if (renderer.lastAppliedShaderGeneration() != expectedShaderGeneration) {
                     throw std::runtime_error("Failed shader compilation replaced the live GPU state");
                 }
+            }
+            if (shaderReloadStressTest && device.deletionQueue().pendingCount() != 0) {
+                throw std::runtime_error("DeletionQueue did not drain after shader reload stress test");
             }
             const auto messages = Log::instance().snapshot();
             const bool hasExpectedCompileError = std::ranges::any_of(messages, [](const auto& message) {

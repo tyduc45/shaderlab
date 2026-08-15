@@ -2,7 +2,7 @@
 
 ## 当前任务
 
-M2.4 ImGui 编辑器外壳、Compile 状态和 Console 已实现并完成自动/截图验证。下一项是 M2.5：100 次 reload 压力测试、人工 Compile/错误 Console 验收和 M2 milestone 收口。M1、M2.1-M2.4 已完成。
+M2.5 自动压力与延迟验收已完成：100/100 顺序 generation 应用，7.9/9.8/14.9ms min/avg/max，DeletionQueue 归零。当前必须等待用户完成 M2 可见交互验收；确认前不得进入 M3。M1、M2.1-M2.5 已完成，M2 milestone 尚未人工收口。
 
 ## 不可破坏的不变式
 
@@ -18,7 +18,7 @@ M2.4 ImGui 编辑器外壳、Compile 状态和 Console 已实现并完成自动/
 1. 阅读 `/doc/implementation_plan.md`、`/doc/progress.md`、本文件。
 2. 检查 `git status --short --branch` 和最近提交，绝不覆盖未知的用户改动。
 3. 从 `progress.md` 第一条非 DONE 项继续。
-4. M2.4 收口后从 M2.5 继续；每个已验证功能点更新 `/doc`、提交并推送。
+4. 等待用户按 `doc/m2_acceptance.md` 完成人工验收；确认后标记 M2 DONE、提交推送 milestone 收口，再进入 M3。
 
 ## 当前环境
 
@@ -40,6 +40,7 @@ M2.4 ImGui 编辑器外壳、Compile 状态和 Console 已实现并完成自动/
 - M1.7 已将相机输入提前到 Vulkan 阻塞点之前，使用 GLFW 回调累积位移、拖动捕获/raw mouse 和约 20ms 半衰期平滑；构建、CTest、Vulkan smoke 与用户手感验收均通过，详见 `doc/input_responsiveness.md`。
 - M2.3b reload smoke 连续触发 10 代只应用 generation 10；generation 11 语法错误保持 live generation 10，详见 `doc/m2_gpu_state.md`。
 - M2.4 基础 UI 与 reload+UI smoke 均退出码 0；DamagedHelmet UI 截图目视通过，详见 `doc/m2_editor_ui.md`。
+- M2.5 100 次顺序 reload 退出码 0、最终 generation 100、DeletionQueue=0；快速 10 次最终代 43.0ms，详见 `doc/m2_acceptance.md`。
 
 ## 已完成的 Vulkan 约束
 
@@ -69,6 +70,7 @@ M2.4 ImGui 编辑器外壳、Compile 状态和 Console 已实现并完成自动/
 - 用户 fragment 位于 `assets/shaders/user/default.frag`，F5 触发异步编译；材质 descriptor 已从 set 0 迁到固定 set 1，set 0 当前为空布局占位。
 - `editor::EditorUi` 使用 ImGui core + GLFW backend，但 Vulkan draw 由项目内 volk-compatible renderer 完成；不要重新接入 vcpkg 预编译 `ImGui_ImplVulkan_*`，其 prototype ABI 与当前 volk 配置冲突。
 - UI 在 ForwardPass 后以 LOAD dynamic rendering 合成；`ForwardPass::transitionToPresent()` 必须保持在 UI record 之后。
+- `ShaderCompiler` 的 `shaderc::Compiler` 必须保持 thread-local；Controller 构造预热两个持久 worker。改回每任务构造会让首次 Compile 回退到约 739ms。
 - `core::Log` 已能把 validation 与编译错误送往未来 ConsolePanel，也能在 smoke test 中通过 stderr 留证。
 - 固定 shader 位于 `assets/shaders/engine/`，只服务于 M1；M2 的用户 fragment shader 编译链不得复用构建期 glslc 状态。
 

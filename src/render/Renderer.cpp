@@ -10,6 +10,7 @@
 #include <GLFW/glfw3.h>
 
 #include <array>
+#include <iomanip>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -70,14 +71,19 @@ void Renderer::drawFrame() {
     processShaderReloads();
     if (const std::uint64_t generation = forwardPass_->commitPendingGpuState(frameNumber_); generation != 0) {
         lastAppliedShaderGeneration_ = generation;
-        core::Log::instance().write(core::LogLevel::Info,
-                                    "Applied shader generation " + std::to_string(generation));
+        std::ostringstream message;
+        message << "Applied shader generation " << generation;
+        if (generation == timedShaderGeneration_) {
+            lastReloadMilliseconds_ = (glfwGetTime() - shaderRequestTime_) * 1000.0;
+            message << " in " << std::fixed << std::setprecision(1) << lastReloadMilliseconds_ << " ms";
+        }
+        core::Log::instance().write(core::LogLevel::Info, message.str());
     }
     if (swapchain_.framebufferExtentChanged()) {
         recreateSwapchain();
     }
     if (editorUi_->beginFrame(shaderReloadInFlight(), shaderReloads_.generation(),
-                              lastAppliedShaderGeneration_)) {
+                              lastAppliedShaderGeneration_, lastReloadMilliseconds_)) {
         static_cast<void>(requestShaderReload());
     }
 
@@ -148,14 +154,20 @@ void Renderer::drawFrame() {
 }
 
 std::uint64_t Renderer::requestShaderReload() {
+    const double requestTime = glfwGetTime();
     const std::uint64_t generation = shaderReloads_.requestFile(userFragmentPath_);
+    timedShaderGeneration_ = generation;
+    shaderRequestTime_ = requestTime;
     core::Log::instance().write(core::LogLevel::Info,
                                 "Queued shader generation " + std::to_string(generation));
     return generation;
 }
 
 std::uint64_t Renderer::requestShaderSource(std::filesystem::path sourcePath, std::string source) {
+    const double requestTime = glfwGetTime();
     const std::uint64_t generation = shaderReloads_.requestSource(std::move(sourcePath), std::move(source));
+    timedShaderGeneration_ = generation;
+    shaderRequestTime_ = requestTime;
     core::Log::instance().write(core::LogLevel::Info,
                                 "Queued shader generation " + std::to_string(generation));
     return generation;

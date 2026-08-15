@@ -94,6 +94,9 @@ private:
     shader::ShaderReloadController shaderReloads_{2};
     std::size_t gpuBuildsInFlight_ = 0;
     std::uint64_t lastAppliedShaderGeneration_ = 0;
+    std::uint64_t timedShaderGeneration_ = 0;
+    double shaderRequestTime_ = 0.0;
+    double lastReloadMilliseconds_ = 0.0;
 };
 
 } // namespace shaderlab::render

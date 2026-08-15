@@ -6,7 +6,17 @@
 
 namespace shaderlab::shader {
 
-ShaderReloadController::ShaderReloadController(const std::size_t workerCount) : jobs_(workerCount) {}
+ShaderReloadController::ShaderReloadController(const std::size_t workerCount) : jobs_(workerCount) {
+    constexpr const char* warmupSource =
+        "#version 460\nlayout(location=0) out vec4 color; void main(){ color=vec4(1.0); }";
+    for (std::size_t worker = 0; worker < jobs_.workerCount(); ++worker) {
+        jobs_.submit([warmupSource] {
+            ShaderCompiler compiler;
+            static_cast<void>(compiler.compileFragment(CompileRequest{"<shaderc-warmup>", warmupSource, 0}));
+        });
+    }
+    jobs_.waitIdle();
+}
 
 std::uint64_t ShaderReloadController::requestFile(const std::filesystem::path& path, const bool optimize) {
     const std::uint64_t generation = generations_.begin();

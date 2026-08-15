@@ -28,7 +28,7 @@ public:
     EditorUi& operator=(const EditorUi&) = delete;
 
     [[nodiscard]] bool beginFrame(bool compileInFlight, std::uint64_t currentGeneration,
-                                  std::uint64_t liveGeneration);
+                                  std::uint64_t liveGeneration, double lastReloadMilliseconds);
     [[nodiscard]] bool wantsMouseCapture() const noexcept;
     void record(VkCommandBuffer commandBuffer, VkImage colorImage, VkImageView colorView,
                 VkExtent2D extent, std::uint32_t frameSlot);

@@ -100,3 +100,19 @@ vcpkg 的 ImGui static library 将官方 Vulkan backend 以直接 Vulkan prototy
 ### 验证
 
 基础 UI smoke 和 reload+UI smoke 均退出码 0；DamagedHelmet 截图确认两个面板、字体、混合和场景合成正确。
+
+## 2026-08-15 — shaderc 一次性初始化在持久 worker 上预热
+
+### 背景
+
+未预热时第一次 fragment compile 端到端为 739.2ms；之后同一线程上的编译稳定在约 8–15ms。根因是每个任务重新构造 `shaderc::Compiler`，并把 glslang 的一次性初始化成本暴露给第一次用户 Compile。
+
+### 决策
+
+- `ShaderCompiler::compileFragment()` 使用 worker thread-local `shaderc::Compiler`。
+- `ShaderReloadController` 构造时向每个持久 worker 提交一次不产生 generation/result 的最小 shader 预热，并等待完成。
+- 预热只移动一次性成本到编辑器启动，不自动生成或应用用户 shader，仍保持“手动 Compile 为默认”的产品语义。
+
+### 验证
+
+预热后第一次用户 generation 为 9.3ms；100 次顺序 reload 的 min/avg/max 为 7.9/9.8/14.9ms；10 次快速触发最终代为 43.0ms，均低于 200ms。
