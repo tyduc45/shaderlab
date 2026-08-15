@@ -3,6 +3,7 @@
 #include "rhi/DeletionQueue.h"
 #include "shader/ShaderCompiler.h"
 #include "shader/GenerationCounter.h"
+#include "shader/ShaderReloadController.h"
 
 #include <atomic>
 #include <cstdlib>
@@ -72,6 +73,21 @@ int main() {
         lastGeneration = generations.begin();
     }
     if (generations.isCurrent(lastGeneration - 1) || !generations.isCurrent(lastGeneration)) {
+        return EXIT_FAILURE;
+    }
+
+    shaderlab::shader::ShaderReloadController reloads(2);
+    constexpr const char* goodSource =
+        "#version 460\nlayout(location=0) out vec4 color; void main(){ color=vec4(1.0); }";
+    constexpr const char* badSource =
+        "#version 460\nlayout(location=0) out vec4 color; void main(){ color=vec4(; }";
+    for (int request = 0; request < 9; ++request) {
+        static_cast<void>(reloads.requestSource("stale.frag", badSource));
+    }
+    const auto expectedGeneration = reloads.requestSource("current.frag", goodSource);
+    reloads.waitIdle();
+    auto current = reloads.pollCurrent();
+    if (!current || !current->success || current->generation != expectedGeneration || reloads.inFlight()) {
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;

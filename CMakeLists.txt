@@ -43,6 +43,8 @@ add_executable(shaderlab WIN32
     src/shader/GenerationCounter.h
     src/shader/ShaderCompiler.cpp
     src/shader/ShaderCompiler.h
+    src/shader/ShaderReloadController.cpp
+    src/shader/ShaderReloadController.h
     src/rhi/DeletionQueue.cpp
     src/rhi/DeletionQueue.h
     src/rhi/Device.cpp
@@ -146,6 +148,8 @@ if(BUILD_TESTING)
         src/shader/ShaderCompiler.h
         src/shader/ShaderAsset.h
         src/shader/GenerationCounter.h
+        src/shader/ShaderReloadController.cpp
+        src/shader/ShaderReloadController.h
     )
     target_compile_options(shaderlab_core_tests PRIVATE /W4 /WX /permissive- /Zc:__cplusplus /utf-8)
     target_include_directories(shaderlab_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

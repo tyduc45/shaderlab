@@ -21,7 +21,8 @@
 | 2026-08-15 | M1 | DONE | “能看到东西”里程碑 | 详见 `doc/m1_acceptance.md` |
 | 2026-08-15 | M2.1 | DONE | DeletionQueue、JobSystem 与线程安全 ResultQueue | 单测覆盖 3 帧延迟和 64 个并发结果；CTest 1/1；DamagedHelmet integration smoke 退出码 0 |
 | 2026-08-15 | M2.2 | DONE | ShaderCompiler、generation counter 与编译结果模型 | shaderc Vulkan 1.4/SPIR-V 1.6；成功/语法错误与行号、10 次 generation 测试；CTest 1/1 |
-| 2026-08-15 | M2.3 | DOING | 双缓冲 GpuState、异步编译调度与帧边界 swap | 正在实现 |
+| 2026-08-15 | M2.3a | DONE | 异步编译调度、文件读取与过期 generation 丢弃 | 2 worker 并发 10 次请求，仅第 10 代成功结果可消费；CTest 1/1 |
+| 2026-08-15 | M2.3b | DOING | 双缓冲 GpuState、pipeline 创建与帧边界 swap | 正在实现 |
 | 2026-08-15 | M3 | TODO | 反射参数系统 | 未开始 |
 | 2026-08-15 | M4 | TODO | Include 依赖图 | 未开始 |
 | 2026-08-15 | M5 | TODO | 多 Material 与 PSO 复用 | 未开始 |
@@ -49,6 +50,7 @@
 - M1 最终截图显示 DamagedHelmet 正确贴图、完整轮廓与稳定深度遮挡；验收证据见 `doc/m1_acceptance.md`。
 - M2.1 新增可配置帧延迟的线程安全 DeletionQueue、异常隔离线程池和 `ResultQueue<T>`；Renderer 每帧推进绝对帧号并 flush，Device 最终 idle 后兜底 flushAll。
 - M2.2 新增 shaderc 编译结果模型，固定 Vulkan 1.4/SPIR-V 1.6、Debug info/Release optimize、warning-as-error，并从 diagnostics 提取 path/line/column；generation 原样随结果返回。
+- M2.3a 新增 `ShaderReloadController`：文件 I/O 与 shaderc 均在 worker，重复触发立即递增 generation，主线程 `pollCurrent()` 静默丢弃所有过期结果。
 
 ## 验证命令
 
