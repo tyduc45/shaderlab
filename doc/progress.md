@@ -29,7 +29,9 @@
 | 2026-08-15 | M2.5 | DONE | shaderc worker 预热、reload 延迟测量与 100 次顺序压力验证 | 100/100 应用；7.9/9.8/14.9ms min/avg/max；DeletionQueue=0；退出码 0 |
 | 2026-08-15 | M2 | DONE | “热重载骨架”milestone | 自动与可见交互验收通过；合法效果热重载、错误保持 live、Console 行号均复核通过 |
 | 2026-08-15 | M3.1 | DONE | SPIRV-Reflect、参数元数据与 MaterialAsset 真相层 | 反射 descriptor/UBO offset/type/hash；名称持久化与类型重置单测；Debug `/W4 /WX`、CTest 1/1 |
-| 2026-08-15 | M3 | DOING | 反射参数系统 | M3.1 CPU 真相层完成；继续 descriptor 原子重建与 Inspector |
+| 2026-08-15 | M3.2 | DONE | 反射驱动的 descriptor 兼容组与原子替换 | set 1 layout/pool/set/UBO/pipeline 整组候选构建；100 次重载与 DeletionQueue 归零 |
+| 2026-08-15 | M3.3 | DONE | 自动生成 Material Inspector | 颜色、range、标量/向量、纹理槽按反射与 `@param` 生成；DamagedHelmet 截图通过 |
+| 2026-08-15 | M3 | DOING | 反射参数系统 | 反射、真相层、descriptor 投影与 Inspector 完成；继续 layout-unchanged 快速路径和最终验收 |
 | 2026-08-15 | M4 | TODO | Include 依赖图 | 未开始 |
 | 2026-08-15 | M5 | TODO | 多 Material 与 PSO 复用 | 未开始 |
 | 2026-08-15 | M6 | TODO | Pass Variant 与美术友好 | 未开始 |
@@ -75,6 +77,8 @@
 - 官方 backend 集成通过 Debug 构建、CTest、基础/10 次/100 次 smoke、两次 resize 和 Vulkan screenshot 目视验证；完整留痕见 `doc/imgui_vulkan_backend.md`。
 - 用户确认复杂 fragment shader 的可见热重载效果；复核 generation 11 语法错误时 live generation 保持 10，Console 定位 `reload_failure.frag:2`。M2 正式验收完成，可以进入 M3。
 - M3.1 将 SPIRV-Reflect 接入每次成功编译，产出排序后的 descriptor/UBO 成员布局与稳定 layout hash；`@param` 元数据和 `MaterialAsset` 参数/贴图真相按名称跨编译保留，类型变化才按默认值重置。
+- M3.2 移除 ForwardPass 固定材质 binding；每代 `GpuState` 拥有反射生成的 set 1 layout、pool、sets、MaterialParams UBO、pipeline layout 与 pipeline，旧兼容组作为一个对象延迟销毁。
+- M3.3 新增 Unity 风格 Material Inspector：反射决定结构，`@param` 决定显示名、颜色、range 与分组；纹理槽可选模型 base color、白色 fallback 或已加载 glTF image。
 
 ## 验证命令
 

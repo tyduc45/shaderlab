@@ -10,6 +10,7 @@
 #include <imgui_impl_vulkan.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
@@ -40,6 +41,134 @@ void reportVulkanResult(const VkResult result) {
     }
     core::Log::instance().write(core::LogLevel::Error,
                                 "ImGui Vulkan backend reported VkResult " + std::to_string(result));
+}
+
+const shader::ParamMetadata* findMetadata(const shader::ParamMetadataMap& metadata,
+                                          const std::string& name) {
+    const auto found = metadata.find(name);
+    return found == metadata.end() ? nullptr : &found->second;
+}
+
+std::string parameterLabel(const std::string& name, const shader::ParamMetadata* metadata) {
+    const std::string& displayName = metadata != nullptr && !metadata->displayName.empty()
+                                         ? metadata->displayName
+                                         : name;
+    return displayName + "##" + name;
+}
+
+void showTooltip(const shader::ParamMetadata* metadata) {
+    if (metadata != nullptr && !metadata->tooltip.empty() && ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", metadata->tooltip.c_str());
+    }
+}
+
+bool drawParameter(const shader::UniformMember& member,
+                   material::MaterialParameter& parameter,
+                   const shader::ParamMetadata* metadata) {
+    const std::string label = parameterLabel(member.name, metadata);
+    bool changed = false;
+    switch (member.type) {
+    case shader::MaterialValueType::Float:
+        if (auto* value = std::get_if<float>(&parameter.value)) {
+            if (metadata != nullptr && metadata->rangeMin && metadata->rangeMax) {
+                changed = ImGui::SliderFloat(label.c_str(), value, *metadata->rangeMin, *metadata->rangeMax);
+            } else {
+                changed = ImGui::DragFloat(label.c_str(), value, 0.01F);
+            }
+        }
+        break;
+    case shader::MaterialValueType::Int:
+        if (auto* value = std::get_if<std::int32_t>(&parameter.value)) {
+            changed = ImGui::DragInt(label.c_str(), value, 1.0F);
+        }
+        break;
+    case shader::MaterialValueType::UInt:
+        if (auto* value = std::get_if<std::uint32_t>(&parameter.value)) {
+            int editable = static_cast<int>(std::min<std::uint32_t>(*value,
+                static_cast<std::uint32_t>(std::numeric_limits<int>::max())));
+            if (ImGui::DragInt(label.c_str(), &editable, 1.0F, 0)) {
+                *value = static_cast<std::uint32_t>(std::max(editable, 0));
+                changed = true;
+            }
+        }
+        break;
+    case shader::MaterialValueType::Bool:
+        if (auto* value = std::get_if<std::uint32_t>(&parameter.value)) {
+            bool editable = *value != 0;
+            if (ImGui::Checkbox(label.c_str(), &editable)) {
+                *value = editable ? 1U : 0U;
+                changed = true;
+            }
+        }
+        break;
+    case shader::MaterialValueType::Vec2:
+        if (auto* value = std::get_if<std::array<float, 2>>(&parameter.value)) {
+            changed = ImGui::DragFloat2(label.c_str(), value->data(), 0.01F);
+        }
+        break;
+    case shader::MaterialValueType::Vec3:
+        if (auto* value = std::get_if<std::array<float, 3>>(&parameter.value)) {
+            changed = metadata != nullptr && metadata->uiType == "color"
+                          ? ImGui::ColorEdit3(label.c_str(), value->data())
+                          : ImGui::DragFloat3(label.c_str(), value->data(), 0.01F);
+        }
+        break;
+    case shader::MaterialValueType::Vec4:
+        if (auto* value = std::get_if<std::array<float, 4>>(&parameter.value)) {
+            changed = metadata != nullptr && metadata->uiType == "color"
+                          ? ImGui::ColorEdit4(label.c_str(), value->data())
+                          : ImGui::DragFloat4(label.c_str(), value->data(), 0.01F);
+        }
+        break;
+    case shader::MaterialValueType::Mat3:
+    case shader::MaterialValueType::Mat4:
+    case shader::MaterialValueType::Unsupported:
+        ImGui::TextDisabled("%s (%s is not editable)", label.c_str(),
+                            shader::materialValueTypeName(member.type));
+        break;
+    }
+    showTooltip(metadata);
+    return changed;
+}
+
+std::string texturePreview(const int selection, const std::span<const scene::ImageData> images) {
+    if (selection == material::MaterialAsset::UseModelTexture) return "Model base color";
+    if (selection == material::MaterialAsset::UseFallbackTexture) return "White fallback";
+    if (selection >= 0 && static_cast<std::size_t>(selection) < images.size()) {
+        const auto& image = images[static_cast<std::size_t>(selection)];
+        return image.name.empty() ? "glTF image " + std::to_string(selection) : image.name;
+    }
+    return "White fallback";
+}
+
+bool drawTextureSlot(const shader::DescriptorBinding& binding, int& selection,
+                     const shader::ParamMetadata* metadata,
+                     const std::span<const scene::ImageData> images) {
+    const std::string label = parameterLabel(binding.name, metadata);
+    const std::string preview = texturePreview(selection, images);
+    bool changed = false;
+    if (ImGui::BeginCombo(label.c_str(), preview.c_str())) {
+        if (ImGui::Selectable("Model base color", selection == material::MaterialAsset::UseModelTexture)) {
+            selection = material::MaterialAsset::UseModelTexture;
+            changed = true;
+        }
+        if (ImGui::Selectable("White fallback", selection == material::MaterialAsset::UseFallbackTexture)) {
+            selection = material::MaterialAsset::UseFallbackTexture;
+            changed = true;
+        }
+        for (std::size_t index = 0; index < images.size(); ++index) {
+            const std::string name = images[index].name.empty()
+                                         ? "glTF image " + std::to_string(index)
+                                         : images[index].name;
+            if (ImGui::Selectable(name.c_str(), selection == static_cast<int>(index))) {
+                selection = static_cast<int>(index);
+                changed = true;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    showTooltip(metadata);
+    return changed;
 }
 
 } // namespace
@@ -106,8 +235,13 @@ EditorUi::~EditorUi() {
     destroy();
 }
 
-bool EditorUi::beginFrame(const bool compileInFlight, const std::uint64_t currentGeneration,
-                          const std::uint64_t liveGeneration, const double lastReloadMilliseconds) {
+EditorFrameResult EditorUi::beginFrame(
+    const bool compileInFlight, const std::uint64_t currentGeneration,
+    const std::uint64_t liveGeneration, const double lastReloadMilliseconds,
+    material::MaterialAsset& materialAsset,
+    const shader::ReflectionResult& reflection,
+    const shader::ParamMetadataMap& metadata,
+    const std::span<const scene::ImageData> images) {
     ImGui::SetCurrentContext(context_);
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -118,7 +252,8 @@ bool EditorUi::beginFrame(const bool compileInFlight, const std::uint64_t curren
     ImGui::SetNextWindowPos({viewport->WorkPos.x + 16.0F, viewport->WorkPos.y + 16.0F}, ImGuiCond_Once);
     ImGui::SetNextWindowSize({360.0F, 145.0F}, ImGuiCond_Once);
     ImGui::Begin("Shader");
-    const bool compileRequested = ImGui::Button("Compile (F5)");
+    EditorFrameResult result;
+    result.compileRequested = ImGui::Button("Compile (F5)");
     ImGui::SameLine();
     if (compileInFlight) {
         ImGui::TextUnformatted("Compiling...");
@@ -130,6 +265,45 @@ bool EditorUi::beginFrame(const bool compileInFlight, const std::uint64_t curren
         ImGui::Text("Last reload: %.1f ms", lastReloadMilliseconds);
     }
     ImGui::TextWrapped("Edit assets/shaders/user/default.frag, then compile.");
+    ImGui::End();
+
+    ImGui::SetNextWindowPos({viewport->WorkPos.x + viewport->WorkSize.x - 416.0F,
+                             viewport->WorkPos.y + 16.0F}, ImGuiCond_Once);
+    ImGui::SetNextWindowSize({400.0F, 430.0F}, ImGuiCond_Once);
+    ImGui::Begin("Material Inspector");
+    if (compileInFlight) {
+        ImGui::TextDisabled("Material controls are locked while compiling.");
+    }
+    ImGui::BeginDisabled(compileInFlight);
+    std::string currentGroup;
+    if (const auto* buffer = reflection.materialBuffer()) {
+        for (const auto& member : buffer->members) {
+            const auto parameter = materialAsset.parameters().find(member.name);
+            if (parameter == materialAsset.parameters().end()) continue;
+            const auto* memberMetadata = findMetadata(metadata, member.name);
+            const std::string group = memberMetadata != nullptr ? memberMetadata->group : "Material";
+            if (group != currentGroup) {
+                ImGui::SeparatorText(group.c_str());
+                currentGroup = group;
+            }
+            result.materialChanged |= drawParameter(member, parameter->second, memberMetadata);
+        }
+    }
+    for (const auto* texture : reflection.materialTextures()) {
+        auto selection = materialAsset.textures().find(texture->name);
+        if (selection == materialAsset.textures().end()) continue;
+        const auto* textureMetadata = findMetadata(metadata, texture->name);
+        const std::string group = textureMetadata != nullptr ? textureMetadata->group : "Textures";
+        if (group != currentGroup) {
+            ImGui::SeparatorText(group.c_str());
+            currentGroup = group;
+        }
+        result.materialChanged |= drawTextureSlot(*texture, selection->second, textureMetadata, images);
+    }
+    if (reflection.bindings.empty()) {
+        ImGui::TextDisabled("Compile a shader with set 1 material resources to populate this panel.");
+    }
+    ImGui::EndDisabled();
     ImGui::End();
 
     const auto messages = core::Log::instance().snapshot();
@@ -149,7 +323,7 @@ bool EditorUi::beginFrame(const bool compileInFlight, const std::uint64_t curren
     ImGui::End();
 
     ImGui::Render();
-    return compileRequested;
+    return result;
 }
 
 bool EditorUi::wantsMouseCapture() const noexcept {

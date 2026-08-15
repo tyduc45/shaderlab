@@ -1,8 +1,12 @@
 #pragma once
 
+#include "material/GpuState.h"
+#include "material/MaterialAsset.h"
 #include "rhi/Buffer.h"
 #include "rhi/Image.h"
 #include "scene/ModelAsset.h"
+#include "shader/ParamMetadata.h"
+#include "shader/ReflectionResult.h"
 
 #include <volk.h>
 
@@ -10,16 +14,13 @@
 #include <filesystem>
 #include <glm/mat4x4.hpp>
 #include <memory>
+#include <optional>
 #include <span>
 #include <vector>
 
 namespace shaderlab::rhi {
 class Device;
 class Swapchain;
-}
-
-namespace shaderlab::material {
-class GpuState;
 }
 
 namespace shaderlab::render {
@@ -37,10 +38,25 @@ public:
                 VkExtent2D extent, const glm::mat4& viewProjection) const;
     void transitionToPresent(VkCommandBuffer commandBuffer, VkImage colorImage) const;
     [[nodiscard]] std::unique_ptr<material::GpuState> buildGpuState(
-        std::span<const std::uint32_t> fragmentSpirv, std::uint64_t generation) const;
-    void stageGpuState(std::unique_ptr<material::GpuState> state);
+        std::span<const std::uint32_t> fragmentSpirv,
+        const shader::ReflectionResult& reflection,
+        const material::MaterialAsset& materialAsset,
+        std::uint64_t generation) const;
+    void stageGpuState(std::unique_ptr<material::GpuState> state,
+                       material::MaterialAsset materialAsset,
+                       shader::ParamMetadataMap metadata);
     [[nodiscard]] std::uint64_t commitPendingGpuState(std::uint64_t currentFrame);
     [[nodiscard]] const scene::Bounds& bounds() const noexcept { return model_.bounds(); }
+    [[nodiscard]] const material::MaterialAsset& materialAsset() const noexcept { return materialAsset_; }
+    [[nodiscard]] material::MaterialAsset& materialAsset() noexcept { return materialAsset_; }
+    [[nodiscard]] const shader::ParamMetadataMap& materialMetadata() const noexcept { return metadata_; }
+    [[nodiscard]] const shader::ReflectionResult& materialReflection() const noexcept {
+        return liveGpuState_->reflection();
+    }
+    [[nodiscard]] const std::vector<scene::ImageData>& availableImages() const noexcept {
+        return model_.images();
+    }
+    void projectMaterialAsset();
 
 private:
     void createGeometry();
@@ -60,10 +76,11 @@ private:
     std::vector<rhi::Image> textures_;
     VkSampler sampler_ = VK_NULL_HANDLE;
     VkDescriptorSetLayout globalLayout_ = VK_NULL_HANDLE;
-    VkDescriptorSetLayout materialLayout_ = VK_NULL_HANDLE;
-    VkDescriptorPool materialPool_ = VK_NULL_HANDLE;
-    std::vector<VkDescriptorSet> materialSets_;
     VkFormat colorFormat_ = VK_FORMAT_UNDEFINED;
+    material::MaterialAsset materialAsset_;
+    shader::ParamMetadataMap metadata_;
+    std::optional<material::MaterialAsset> pendingMaterialAsset_;
+    std::optional<shader::ParamMetadataMap> pendingMetadata_;
     std::unique_ptr<material::GpuState> liveGpuState_;
     std::unique_ptr<material::GpuState> pendingGpuState_;
 };

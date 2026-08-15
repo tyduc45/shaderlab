@@ -82,8 +82,15 @@ void Renderer::drawFrame() {
     if (swapchain_.framebufferExtentChanged()) {
         recreateSwapchain();
     }
-    if (editorUi_->beginFrame(shaderReloadInFlight(), shaderReloads_.generation(),
-                              lastAppliedShaderGeneration_, lastReloadMilliseconds_)) {
+    const auto editorActions = editorUi_->beginFrame(
+        shaderReloadInFlight(), shaderReloads_.generation(), lastAppliedShaderGeneration_,
+        lastReloadMilliseconds_, forwardPass_->materialAsset(),
+        forwardPass_->materialReflection(), forwardPass_->materialMetadata(),
+        forwardPass_->availableImages());
+    if (editorActions.materialChanged) {
+        forwardPass_->projectMaterialAsset();
+    }
+    if (editorActions.compileRequested) {
         static_cast<void>(requestShaderReload());
     }
 
@@ -191,14 +198,23 @@ void Renderer::processShaderReloads() {
         } else {
             const std::uint64_t generation = compile->generation;
             auto spirv = std::move(compile->spirv);
+            auto reflection = std::move(compile->reflection);
+            auto metadata = std::move(compile->metadata);
             ForwardPass* const pass = forwardPass_.get();
+            auto materialAsset = pass->materialAsset();
+            materialAsset.reconcile(reflection, metadata);
             ++gpuBuildsInFlight_;
             try {
-                gpuBuildJobs_.submit([this, pass, generation, spirv = std::move(spirv)] {
+                gpuBuildJobs_.submit([this, pass, generation, spirv = std::move(spirv),
+                                      reflection = std::move(reflection),
+                                      materialAsset = std::move(materialAsset),
+                                      metadata = std::move(metadata)]() mutable {
                     GpuBuildResult result;
                     result.generation = generation;
                     try {
-                        result.state = pass->buildGpuState(spirv, generation);
+                        result.state = pass->buildGpuState(spirv, reflection, materialAsset, generation);
+                        result.materialAsset = std::move(materialAsset);
+                        result.metadata = std::move(metadata);
                     } catch (const std::exception& error) {
                         result.error = error.what();
                     } catch (...) {
@@ -226,7 +242,8 @@ void Renderer::processShaderReloads() {
                                             " pipeline creation failed: " + result->error);
             continue;
         }
-        forwardPass_->stageGpuState(std::move(result->state));
+        forwardPass_->stageGpuState(std::move(result->state), std::move(result->materialAsset),
+                                    std::move(result->metadata));
     }
 }
 

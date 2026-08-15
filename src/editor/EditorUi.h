@@ -1,8 +1,14 @@
 #pragma once
 
+#include "material/MaterialAsset.h"
+#include "scene/ModelAsset.h"
+#include "shader/ParamMetadata.h"
+#include "shader/ReflectionResult.h"
+
 #include <volk.h>
 
 #include <cstdint>
+#include <span>
 
 struct GLFWwindow;
 struct ImGuiContext;
@@ -14,6 +20,11 @@ class Swapchain;
 
 namespace shaderlab::editor {
 
+struct EditorFrameResult {
+    bool compileRequested = false;
+    bool materialChanged = false;
+};
+
 class EditorUi final {
 public:
     EditorUi(rhi::Device& device, const rhi::Swapchain& swapchain, GLFWwindow* window);
@@ -22,8 +33,13 @@ public:
     EditorUi(const EditorUi&) = delete;
     EditorUi& operator=(const EditorUi&) = delete;
 
-    [[nodiscard]] bool beginFrame(bool compileInFlight, std::uint64_t currentGeneration,
-                                  std::uint64_t liveGeneration, double lastReloadMilliseconds);
+    [[nodiscard]] EditorFrameResult beginFrame(
+        bool compileInFlight, std::uint64_t currentGeneration,
+        std::uint64_t liveGeneration, double lastReloadMilliseconds,
+        material::MaterialAsset& materialAsset,
+        const shader::ReflectionResult& reflection,
+        const shader::ParamMetadataMap& metadata,
+        std::span<const scene::ImageData> images);
     [[nodiscard]] bool wantsMouseCapture() const noexcept;
     void record(VkCommandBuffer commandBuffer, VkImage colorImage, VkImageView colorView,
                 VkExtent2D extent);

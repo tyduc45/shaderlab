@@ -2,6 +2,7 @@
 
 #include "core/JobSystem.h"
 #include "material/GpuState.h"
+#include "material/MaterialAsset.h"
 #include "scene/OrbitCamera.h"
 #include "shader/ShaderReloadController.h"
 
@@ -60,6 +61,8 @@ private:
     struct GpuBuildResult {
         std::uint64_t generation = 0;
         std::unique_ptr<material::GpuState> state;
+        material::MaterialAsset materialAsset;
+        shader::ParamMetadataMap metadata;
         std::string error;
     };
 
