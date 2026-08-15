@@ -2,7 +2,7 @@
 
 ## 当前任务
 
-M2.5 自动压力与延迟验收已完成：100/100 顺序 generation 应用，7.9/9.8/14.9ms min/avg/max，DeletionQueue 归零。当前必须等待用户完成 M2 可见交互验收；确认前不得进入 M3。M1、M2.1-M2.5 已完成，M2 milestone 尚未人工收口。
+M2 已完成自动与可见交互验收并正式收口。当前开始 M3 反射驱动的参数系统：SPIRV-Reflect、UniformLayout、MaterialAsset 真相层、descriptor 原子重建与 Inspector。
 
 ## 不可破坏的不变式
 
@@ -19,7 +19,7 @@ M2.5 自动压力与延迟验收已完成：100/100 顺序 generation 应用，7
 1. 阅读 `/doc/implementation_plan.md`、`/doc/progress.md`、本文件。
 2. 检查 `git status --short --branch` 和最近提交，绝不覆盖未知的用户改动。
 3. 从 `progress.md` 第一条非 DONE 项继续。
-4. 等待用户按 `doc/m2_acceptance.md` 完成人工验收；确认后标记 M2 DONE、提交推送 milestone 收口，再进入 M3。
+4. 从 `doc/shaderlab_spec.md` 的 M3 反射参数系统继续，保持真相层与 GPU 派生层边界。
 
 ## 当前环境
 

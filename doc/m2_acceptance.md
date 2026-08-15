@@ -4,7 +4,8 @@
 
 ## 当前结论
 
-M2 自动验收通过，等待用户完成可见交互验收后收口 milestone。M3 在此之前不开始。
+M2 自动验收与可见交互验收均已通过，milestone 正式完成。用户于
+2026-08-15 确认可以收口 M2 并开始 M3。
 
 ## 已完成能力
 
@@ -64,12 +65,13 @@ $env:SHADERLAB_RELOAD_STRESS_TEST = '1'
 Remove-Item Env:SHADERLAB_RELOAD_STRESS_TEST
 ```
 
-## 待用户人工验收
+## 用户可见交互验收
 
-1. 运行 `build/Debug/shaderlab.exe`，确认 Shader 与 Console 面板可见且轨道相机仍可拖动。
-2. 修改 `assets/shaders/user/default.frag` 的可见颜色逻辑，点击 Compile 或 F5；确认画面更新且面板显示 reload 时间。
-3. 写入一个临时语法错误再次 Compile；确认画面保持上一个成功效果，Console 显示正确文件与行号。
-4. 恢复合法 shader，再次 Compile；确认正常恢复。
-5. 可选观察任务管理器 GPU dedicated memory，重复 Compile 时不应持续单调增长。
+1. Shader 与 Console 面板可见；此前已验收的轨道相机交互保持可用。
+2. 将用户 fragment shader 改为复杂虹彩蚀刻效果后触发 Compile，画面更新且面板显示 reload 时间。
+3. generation 11 故意注入语法错误后，画面保持 generation 10 的成功效果，Console 正确显示 `reload_failure.frag:2`。
+4. 随后重新加载合法文件，恢复成功。
+5. 复核截图保存在忽略目录 `build/m2-audit-error/6.png`；错误回退 smoke 退出码 0。
 
-用户确认后，将 M2 状态改为 DONE、记录验收并推送 milestone 收口提交；然后进入 M3。
+GPU dedicated memory 长时间人工曲线为可选观察项；100 次压力测试已验证
+DeletionQueue 归零且进程工作集不随 generation 线性增长。

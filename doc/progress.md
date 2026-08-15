@@ -27,7 +27,7 @@
 | 2026-08-15 | M2.4 | DONE | ImGui 编辑器外壳、Compile 状态与 Console 面板 | dynamic-rendering UI smoke + reload smoke 退出码 0；截图目视通过 |
 | 2026-08-15 | M2.4a 集成修正 | DONE | namespaced Volk 隔离项目符号，恢复 vcpkg 官方 ImGui Vulkan backend | Debug `/W4 /WX`；3 类 smoke；CTest 1/1；两次 resize；官方 backend 截图通过 |
 | 2026-08-15 | M2.5 | DONE | shaderc worker 预热、reload 延迟测量与 100 次顺序压力验证 | 100/100 应用；7.9/9.8/14.9ms min/avg/max；DeletionQueue=0；退出码 0 |
-| 2026-08-15 | M2 | DOING | “热重载骨架”milestone | 自动验收通过；等待用户可见 Compile/错误保持 live/Console 验收 |
+| 2026-08-15 | M2 | DONE | “热重载骨架”milestone | 自动与可见交互验收通过；合法效果热重载、错误保持 live、Console 行号均复核通过 |
 | 2026-08-15 | M3 | TODO | 反射参数系统 | 未开始 |
 | 2026-08-15 | M4 | TODO | Include 依赖图 | 未开始 |
 | 2026-08-15 | M5 | TODO | 多 Material 与 PSO 复用 | 未开始 |
@@ -72,6 +72,7 @@
 - M2.4a 将 ShaderLab 的 Volk 编译进 C++ `volk` namespace，避免与官方 backend 的全局 Vulkan 函数符号冲突；恢复 vcpkg `imgui_impl_vulkan`，删除自制 UI shader、pipeline、descriptor、font atlas 与 draw buffer。
 - 确立长期原则：依赖库存在官方 Vulkan backend 时默认使用官方实现；加载冲突优先通过编译、命名空间和链接边界解决，除非官方 backend 明确缺少能力，否则不自行重写。
 - 官方 backend 集成通过 Debug 构建、CTest、基础/10 次/100 次 smoke、两次 resize 和 Vulkan screenshot 目视验证；完整留痕见 `doc/imgui_vulkan_backend.md`。
+- 用户确认复杂 fragment shader 的可见热重载效果；复核 generation 11 语法错误时 live generation 保持 10，Console 定位 `reload_failure.frag:2`。M2 正式验收完成，可以进入 M3。
 
 ## 验证命令
 
