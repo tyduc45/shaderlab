@@ -62,8 +62,9 @@ MaterialParameter defaultParameter(const shader::MaterialValueType type,
     return parameter;
 }
 
-void MaterialAsset::reconcile(const shader::ReflectionResult& reflection,
-                              const shader::ParamMetadataMap& metadata) {
+std::size_t MaterialAsset::reconcile(const shader::ReflectionResult& reflection,
+                                     const shader::ParamMetadataMap& metadata) {
+    std::size_t resetCount = 0;
     if (const auto* buffer = reflection.materialBuffer()) {
         for (const auto& member : buffer->members) {
             const auto foundMetadata = metadata.find(member.name);
@@ -71,6 +72,9 @@ void MaterialAsset::reconcile(const shader::ReflectionResult& reflection,
                 foundMetadata == metadata.end() ? nullptr : &foundMetadata->second;
             const auto existing = parameters_.find(member.name);
             if (existing == parameters_.end() || existing->second.type != member.type) {
+                if (existing != parameters_.end()) {
+                    ++resetCount;
+                }
                 parameters_[member.name] = defaultParameter(member.type, memberMetadata);
             }
         }
@@ -82,6 +86,7 @@ void MaterialAsset::reconcile(const shader::ReflectionResult& reflection,
             textures_[texture->name] = isBaseColor ? UseModelTexture : UseFallbackTexture;
         }
     }
+    return resetCount;
 }
 
 } // namespace shaderlab::material

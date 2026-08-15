@@ -12,7 +12,9 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 struct GLFWwindow;
@@ -46,6 +48,8 @@ public:
     [[nodiscard]] std::uint64_t requestShaderSource(std::filesystem::path sourcePath, std::string source);
     void waitForShaderReload();
     [[nodiscard]] bool shaderReloadInFlight() const noexcept;
+    [[nodiscard]] bool setMaterialFloat(std::string_view name, float value);
+    [[nodiscard]] std::optional<float> materialFloat(std::string_view name) const;
     [[nodiscard]] std::uint64_t lastAppliedShaderGeneration() const noexcept {
         return lastAppliedShaderGeneration_;
     }
@@ -63,6 +67,8 @@ private:
         std::unique_ptr<material::GpuState> state;
         material::MaterialAsset materialAsset;
         shader::ParamMetadataMap metadata;
+        bool reusedMaterialResources = false;
+        std::size_t resetParameterCount = 0;
         std::string error;
     };
 

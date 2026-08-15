@@ -31,7 +31,8 @@
 | 2026-08-15 | M3.1 | DONE | SPIRV-Reflect、参数元数据与 MaterialAsset 真相层 | 反射 descriptor/UBO offset/type/hash；名称持久化与类型重置单测；Debug `/W4 /WX`、CTest 1/1 |
 | 2026-08-15 | M3.2 | DONE | 反射驱动的 descriptor 兼容组与原子替换 | set 1 layout/pool/set/UBO/pipeline 整组候选构建；100 次重载与 DeletionQueue 归零 |
 | 2026-08-15 | M3.3 | DONE | 自动生成 Material Inspector | 颜色、range、标量/向量、纹理槽按反射与 `@param` 生成；DamagedHelmet 截图通过 |
-| 2026-08-15 | M3 | DOING | 反射参数系统 | 反射、真相层、descriptor 投影与 Inspector 完成；继续 layout-unchanged 快速路径和最终验收 |
+| 2026-08-15 | M3.4 | DONE | layout-unchanged 快速路径与参数迁移验收 | 100 次中 99 次复用 descriptor 资源；UI 值跨重编译保留；删除/恢复与类型重置单测 |
+| 2026-08-15 | M3 | DOING | 反射参数系统 | 实现和自动验收完成；等待用户可见 Inspector 操作验收 |
 | 2026-08-15 | M4 | TODO | Include 依赖图 | 未开始 |
 | 2026-08-15 | M5 | TODO | 多 Material 与 PSO 复用 | 未开始 |
 | 2026-08-15 | M6 | TODO | Pass Variant 与美术友好 | 未开始 |
@@ -79,6 +80,7 @@
 - M3.1 将 SPIRV-Reflect 接入每次成功编译，产出排序后的 descriptor/UBO 成员布局与稳定 layout hash；`@param` 元数据和 `MaterialAsset` 参数/贴图真相按名称跨编译保留，类型变化才按默认值重置。
 - M3.2 移除 ForwardPass 固定材质 binding；每代 `GpuState` 拥有反射生成的 set 1 layout、pool、sets、MaterialParams UBO、pipeline layout 与 pipeline，旧兼容组作为一个对象延迟销毁。
 - M3.3 新增 Unity 风格 Material Inspector：反射决定结构，`@param` 决定显示名、颜色、range 与分组；纹理槽可选模型 base color、白色 fallback 或已加载 glTF image。
+- M3.4 将 descriptor layout/pool/sets/UBO 收拢为共享寿命组；layout hash 不变时异步候选只创建新 pipeline layout/pipeline。100 次 stress 中后 99 次命中，Material smoke 验证编辑值跨重编译保留。
 
 ## 验证命令
 

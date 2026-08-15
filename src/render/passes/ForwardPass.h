@@ -41,6 +41,7 @@ public:
         std::span<const std::uint32_t> fragmentSpirv,
         const shader::ReflectionResult& reflection,
         const material::MaterialAsset& materialAsset,
+        std::shared_ptr<material::MaterialResources> reusableResources,
         std::uint64_t generation) const;
     void stageGpuState(std::unique_ptr<material::GpuState> state,
                        material::MaterialAsset materialAsset,
@@ -56,6 +57,8 @@ public:
     [[nodiscard]] const std::vector<scene::ImageData>& availableImages() const noexcept {
         return model_.images();
     }
+    [[nodiscard]] std::shared_ptr<material::MaterialResources> reusableMaterialResources(
+        std::uint64_t layoutHash) const noexcept;
     void projectMaterialAsset();
 
 private:

@@ -17,6 +17,10 @@
 进入 pending；帧边界一次替换 live 指针。旧状态整体捕获进 `DeletionQueue`，不会出现
 新 pipeline 搭配旧 descriptor set 的中间态。
 
+layout hash 未变化时，候选状态通过 `shared_ptr<MaterialResources>` 持有 live descriptor
+兼容组的寿命，只创建新的 pipeline layout/pipeline。即使 worker 跨过若干帧，旧 layout
+也不会在构建过程中被 DeletionQueue 提前销毁。
+
 ## Material Inspector
 
 - SPIR-V 反射决定控件顺序和真实类型。
@@ -38,4 +42,6 @@
 - Debug `/W4 /WX` 与 CTest 通过。
 - reload smoke 成功应用动态布局，语法错误保持旧兼容组。
 - 100 次顺序动态 descriptor 重建全部应用，退出码 0，DeletionQueue 归零。
+- 快速路径压力测试中 generation 2–100 共 99 次复用 live descriptor 资源。
+- Material smoke 将 `engravingStrength` 改为 0.125 后重编译，值与 GPU 投影保持不变。
 - 本地截图：`build/m3-inspector-preview/2.png`（Git 忽略）。

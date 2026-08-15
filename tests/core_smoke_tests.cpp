@@ -88,6 +88,31 @@ void main(){ color=texture(albedoTexture, vec2(0.5))*material.tint; })",
         material.textures().at("albedoTexture") != shaderlab::material::MaterialAsset::UseModelTexture) {
         return EXIT_FAILURE;
     }
+    auto* tint = std::get_if<std::array<float, 4>>(&material.parameters().at("tint").value);
+    if (tint == nullptr) {
+        return EXIT_FAILURE;
+    }
+    (*tint)[0] = 0.73F;
+    material.textures().at("albedoTexture") = 3;
+    material.reconcile({}, {});
+    material.reconcile(reflected.reflection, reflected.metadata);
+    tint = std::get_if<std::array<float, 4>>(&material.parameters().at("tint").value);
+    if (tint == nullptr || (*tint)[0] != 0.73F || material.textures().at("albedoTexture") != 3) {
+        return EXIT_FAILURE;
+    }
+    auto typeChangedReflection = reflected.reflection;
+    for (auto& binding : typeChangedReflection.bindings) {
+        if (binding.set == 1 && binding.kind == shaderlab::shader::DescriptorKind::UniformBuffer) {
+            binding.members.front().type = shaderlab::shader::MaterialValueType::Float;
+        }
+    }
+    auto typeChangedMetadata = reflected.metadata;
+    typeChangedMetadata["tint"].defaultValues = {0.25F};
+    const auto resetCount = material.reconcile(typeChangedReflection, typeChangedMetadata);
+    const auto* resetTint = std::get_if<float>(&material.parameters().at("tint").value);
+    if (resetCount != 1 || resetTint == nullptr || *resetTint != 0.25F) {
+        return EXIT_FAILURE;
+    }
     const shaderlab::shader::CompileRequest invalidRequest{
         "broken.frag",
         "#version 460\nlayout(location=0) out vec4 color; void main(){ color=vec4(; }",

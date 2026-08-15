@@ -4,6 +4,7 @@
 #include "shader/ReflectionResult.h"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <string>
@@ -31,8 +32,8 @@ public:
     static constexpr int UseModelTexture = -2;
     static constexpr int UseFallbackTexture = -1;
 
-    void reconcile(const shader::ReflectionResult& reflection,
-                   const shader::ParamMetadataMap& metadata);
+    std::size_t reconcile(const shader::ReflectionResult& reflection,
+                          const shader::ParamMetadataMap& metadata);
 
     [[nodiscard]] std::map<std::string, MaterialParameter>& parameters() noexcept { return parameters_; }
     [[nodiscard]] const std::map<std::string, MaterialParameter>& parameters() const noexcept { return parameters_; }

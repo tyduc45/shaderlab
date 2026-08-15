@@ -2,7 +2,7 @@
 
 ## 当前任务
 
-M2 已完成自动与可见交互验收并正式收口。当前开始 M3 反射驱动的参数系统：SPIRV-Reflect、UniformLayout、MaterialAsset 真相层、descriptor 原子重建与 Inspector。
+M3 反射驱动参数系统的实现与自动验收已完成：SPIRV-Reflect、MaterialAsset 真相层、descriptor 原子兼容组、layout-unchanged 快速路径与 Inspector 均已落地。当前等待用户完成可见 Inspector 操作验收，确认前不进入 M4。
 
 ## 不可破坏的不变式
 
@@ -19,7 +19,7 @@ M2 已完成自动与可见交互验收并正式收口。当前开始 M3 反射�
 1. 阅读 `/doc/implementation_plan.md`、`/doc/progress.md`、本文件。
 2. 检查 `git status --short --branch` 和最近提交，绝不覆盖未知的用户改动。
 3. 从 `progress.md` 第一条非 DONE 项继续。
-4. 从 `doc/shaderlab_spec.md` 的 M3 反射参数系统继续，保持真相层与 GPU 派生层边界。
+4. 等待用户按 `doc/m3_acceptance.md` 完成可见 Inspector 验收；确认后收口 M3，再进入 M4。
 
 ## 当前环境
 

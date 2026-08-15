@@ -347,23 +347,34 @@ std::size_t ForwardPass::materialSlot(const int materialIndex) const noexcept {
                : model_.materials().size();
 }
 
+std::shared_ptr<material::MaterialResources> ForwardPass::reusableMaterialResources(
+    const std::uint64_t layoutHash) const noexcept {
+    if (!liveGpuState_ || liveGpuState_->reflection().layoutHash != layoutHash) {
+        return {};
+    }
+    const auto& resources = liveGpuState_->materialResources();
+    return resources && resources->layoutHash() == layoutHash ? resources : nullptr;
+}
+
 void ForwardPass::createInitialGpuState() {
     const auto shaderDirectory = std::filesystem::path(SHADERLAB_SHADER_DIR);
     const auto spirv = readSpirv(shaderDirectory / "fixed.frag.spv");
     const auto reflection = shader::reflectSpirv(spirv);
     materialAsset_.reconcile(reflection, {});
-    liveGpuState_ = buildGpuState(spirv, reflection, materialAsset_, 0);
+    liveGpuState_ = buildGpuState(spirv, reflection, materialAsset_, {}, 0);
 }
 
 std::unique_ptr<material::GpuState> ForwardPass::buildGpuState(
     const std::span<const std::uint32_t> fragmentSpirv,
     const shader::ReflectionResult& reflection,
     const material::MaterialAsset& materialAsset,
+    std::shared_ptr<material::MaterialResources> reusableResources,
     const std::uint64_t generation) const {
     const auto shaderDirectory = std::filesystem::path(SHADERLAB_SHADER_DIR);
     VkShaderModule vertex = VK_NULL_HANDLE;
     VkShaderModule fragment = VK_NULL_HANDLE;
-    VkDescriptorSetLayout materialLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout materialLayout = reusableResources ? reusableResources->layout() : VK_NULL_HANDLE;
+    bool ownsMaterialLayout = false;
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     VkPipeline pipeline = VK_NULL_HANDLE;
@@ -398,15 +409,19 @@ std::unique_ptr<material::GpuState> ForwardPass::buildGpuState(
             binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
             materialBindings.push_back(binding);
         }
-        VkDescriptorSetLayoutCreateInfo materialLayoutInfo{
-            VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-        materialLayoutInfo.bindingCount = static_cast<std::uint32_t>(materialBindings.size());
-        materialLayoutInfo.pBindings = materialBindings.data();
-        auto result = vkCreateDescriptorSetLayout(device_.logicalDevice(), &materialLayoutInfo,
-                                                  nullptr, &materialLayout);
-        if (result != VK_SUCCESS) {
-            throw std::runtime_error("vkCreateDescriptorSetLayout(material) failed with VkResult " +
-                                     std::to_string(result));
+        auto result = VK_SUCCESS;
+        if (!reusableResources) {
+            VkDescriptorSetLayoutCreateInfo materialLayoutInfo{
+                VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+            materialLayoutInfo.bindingCount = static_cast<std::uint32_t>(materialBindings.size());
+            materialLayoutInfo.pBindings = materialBindings.data();
+            result = vkCreateDescriptorSetLayout(device_.logicalDevice(), &materialLayoutInfo,
+                                                 nullptr, &materialLayout);
+            if (result != VK_SUCCESS) {
+                throw std::runtime_error("vkCreateDescriptorSetLayout(material) failed with VkResult " +
+                                         std::to_string(result));
+            }
+            ownsMaterialLayout = true;
         }
 
         vertex = createShaderModule(device_, shaderDirectory / "fixed.vert.spv", "M2 fixed VS");
@@ -496,108 +511,116 @@ std::unique_ptr<material::GpuState> ForwardPass::buildGpuState(
                              "M3 reflected pipeline layout" + suffix);
         device_.setDebugName(VK_OBJECT_TYPE_PIPELINE, reinterpret_cast<std::uint64_t>(pipeline),
                              "M3 ForwardPass pipeline" + suffix);
-        device_.setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
-                             reinterpret_cast<std::uint64_t>(materialLayout),
-                             "M3 reflected material layout" + suffix);
-
-        const std::uint32_t setCount = static_cast<std::uint32_t>(model_.materials().size() + 1);
-        std::vector<VkDescriptorPoolSize> poolSizes;
-        if (uniformBufferCount != 0) {
-            poolSizes.push_back({VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, uniformBufferCount * setCount});
-        }
-        if (textureCount != 0) {
-            poolSizes.push_back({VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, textureCount * setCount});
-        }
-        VkDescriptorPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
-        poolInfo.maxSets = setCount;
-        poolInfo.poolSizeCount = static_cast<std::uint32_t>(poolSizes.size());
-        poolInfo.pPoolSizes = poolSizes.data();
-        result = vkCreateDescriptorPool(device_.logicalDevice(), &poolInfo, nullptr, &descriptorPool);
-        if (result != VK_SUCCESS) {
-            throw std::runtime_error("vkCreateDescriptorPool(material) failed with VkResult " +
-                                     std::to_string(result));
-        }
-        device_.setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_POOL,
-                             reinterpret_cast<std::uint64_t>(descriptorPool),
-                             "M3 reflected material pool" + suffix);
-
-        std::vector<VkDescriptorSetLayout> layouts(setCount, materialLayout);
-        std::vector<VkDescriptorSet> materialSets(setCount);
-        VkDescriptorSetAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
-        allocateInfo.descriptorPool = descriptorPool;
-        allocateInfo.descriptorSetCount = setCount;
-        allocateInfo.pSetLayouts = layouts.data();
-        result = vkAllocateDescriptorSets(device_.logicalDevice(), &allocateInfo, materialSets.data());
-        if (result != VK_SUCCESS) {
-            throw std::runtime_error("vkAllocateDescriptorSets(material) failed with VkResult " +
-                                     std::to_string(result));
+        if (!reusableResources) {
+            device_.setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+                                 reinterpret_cast<std::uint64_t>(materialLayout),
+                                 "M3 reflected material layout" + suffix);
         }
 
-        const auto* reflectedBuffer = reflection.materialBuffer();
-        if (reflectedBuffer != nullptr) {
-            if (reflectedBuffer->blockSize == 0) {
-                throw std::invalid_argument("MaterialParams has a zero-sized reflected block");
+        if (!reusableResources) {
+            const std::uint32_t setCount = static_cast<std::uint32_t>(model_.materials().size() + 1);
+            std::vector<VkDescriptorPoolSize> poolSizes;
+            if (uniformBufferCount != 0) {
+                poolSizes.push_back({VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, uniformBufferCount * setCount});
             }
-            constexpr auto allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                                             VMA_ALLOCATION_CREATE_MAPPED_BIT;
-            materialBuffer = rhi::Buffer(device_, reflectedBuffer->blockSize,
-                                         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                                         VMA_MEMORY_USAGE_AUTO, allocationFlags,
-                                         "M3 MaterialParams" + suffix);
-            const auto packed = packMaterialBuffer(*reflectedBuffer, materialAsset);
-            materialBuffer.write(packed.data(), packed.size());
-        }
+            if (textureCount != 0) {
+                poolSizes.push_back({VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, textureCount * setCount});
+            }
+            VkDescriptorPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+            poolInfo.maxSets = setCount;
+            poolInfo.poolSizeCount = static_cast<std::uint32_t>(poolSizes.size());
+            poolInfo.pPoolSizes = poolSizes.data();
+            result = vkCreateDescriptorPool(device_.logicalDevice(), &poolInfo, nullptr, &descriptorPool);
+            if (result != VK_SUCCESS) {
+                throw std::runtime_error("vkCreateDescriptorPool(material) failed with VkResult " +
+                                         std::to_string(result));
+            }
+            device_.setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_POOL,
+                                 reinterpret_cast<std::uint64_t>(descriptorPool),
+                                 "M3 reflected material pool" + suffix);
 
-        const std::size_t writeCapacity = static_cast<std::size_t>(setCount) * reflection.bindings.size();
-        std::vector<VkDescriptorBufferInfo> bufferInfos;
-        std::vector<VkDescriptorImageInfo> imageInfos;
-        std::vector<VkWriteDescriptorSet> writes;
-        bufferInfos.reserve(writeCapacity);
-        imageInfos.reserve(writeCapacity);
-        writes.reserve(writeCapacity);
-        for (std::size_t slot = 0; slot < materialSets.size(); ++slot) {
-            device_.setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET,
-                                 reinterpret_cast<std::uint64_t>(materialSets[slot]),
-                                 "M3 material set " + std::to_string(slot) + suffix);
-            for (const auto& reflected : reflection.bindings) {
-                VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-                write.dstSet = materialSets[slot];
-                write.dstBinding = reflected.binding;
-                write.descriptorCount = 1;
-                write.descriptorType = vkDescriptorType(reflected.kind);
-                if (reflected.kind == shader::DescriptorKind::UniformBuffer) {
-                    bufferInfos.push_back({materialBuffer.handle(), 0, reflected.blockSize});
-                    write.pBufferInfo = &bufferInfos.back();
-                } else {
-                    int selection = material::MaterialAsset::UseFallbackTexture;
-                    if (const auto selected = materialAsset.textures().find(reflected.name);
-                        selected != materialAsset.textures().end()) {
-                        selection = selected->second;
-                    }
-                    if (selection == material::MaterialAsset::UseModelTexture &&
-                        slot < model_.materials().size()) {
-                        selection = model_.materials()[slot].baseColorImage;
-                    }
-                    VkImageView view = fallbackTexture_.view();
-                    if (selection >= 0 && static_cast<std::size_t>(selection) < textures_.size()) {
-                        view = textures_[static_cast<std::size_t>(selection)].view();
-                    }
-                    imageInfos.push_back({sampler_, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
-                    write.pImageInfo = &imageInfos.back();
+            std::vector<VkDescriptorSetLayout> layouts(setCount, materialLayout);
+            std::vector<VkDescriptorSet> materialSets(setCount);
+            VkDescriptorSetAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+            allocateInfo.descriptorPool = descriptorPool;
+            allocateInfo.descriptorSetCount = setCount;
+            allocateInfo.pSetLayouts = layouts.data();
+            result = vkAllocateDescriptorSets(device_.logicalDevice(), &allocateInfo, materialSets.data());
+            if (result != VK_SUCCESS) {
+                throw std::runtime_error("vkAllocateDescriptorSets(material) failed with VkResult " +
+                                         std::to_string(result));
+            }
+
+            const auto* reflectedBuffer = reflection.materialBuffer();
+            if (reflectedBuffer != nullptr) {
+                if (reflectedBuffer->blockSize == 0) {
+                    throw std::invalid_argument("MaterialParams has a zero-sized reflected block");
                 }
-                writes.push_back(write);
+                constexpr auto allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                                                 VMA_ALLOCATION_CREATE_MAPPED_BIT;
+                materialBuffer = rhi::Buffer(device_, reflectedBuffer->blockSize,
+                                             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                             VMA_MEMORY_USAGE_AUTO, allocationFlags,
+                                             "M3 MaterialParams" + suffix);
+                const auto packed = packMaterialBuffer(*reflectedBuffer, materialAsset);
+                materialBuffer.write(packed.data(), packed.size());
             }
-        }
-        if (!writes.empty()) {
-            vkUpdateDescriptorSets(device_.logicalDevice(), static_cast<std::uint32_t>(writes.size()),
-                                   writes.data(), 0, nullptr);
+
+            const std::size_t writeCapacity = static_cast<std::size_t>(setCount) * reflection.bindings.size();
+            std::vector<VkDescriptorBufferInfo> bufferInfos;
+            std::vector<VkDescriptorImageInfo> imageInfos;
+            std::vector<VkWriteDescriptorSet> writes;
+            bufferInfos.reserve(writeCapacity);
+            imageInfos.reserve(writeCapacity);
+            writes.reserve(writeCapacity);
+            for (std::size_t slot = 0; slot < materialSets.size(); ++slot) {
+                device_.setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                                     reinterpret_cast<std::uint64_t>(materialSets[slot]),
+                                     "M3 material set " + std::to_string(slot) + suffix);
+                for (const auto& reflected : reflection.bindings) {
+                    VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+                    write.dstSet = materialSets[slot];
+                    write.dstBinding = reflected.binding;
+                    write.descriptorCount = 1;
+                    write.descriptorType = vkDescriptorType(reflected.kind);
+                    if (reflected.kind == shader::DescriptorKind::UniformBuffer) {
+                        bufferInfos.push_back({materialBuffer.handle(), 0, reflected.blockSize});
+                        write.pBufferInfo = &bufferInfos.back();
+                    } else {
+                        int selection = material::MaterialAsset::UseFallbackTexture;
+                        if (const auto selected = materialAsset.textures().find(reflected.name);
+                            selected != materialAsset.textures().end()) {
+                            selection = selected->second;
+                        }
+                        if (selection == material::MaterialAsset::UseModelTexture &&
+                            slot < model_.materials().size()) {
+                            selection = model_.materials()[slot].baseColorImage;
+                        }
+                        VkImageView view = fallbackTexture_.view();
+                        if (selection >= 0 && static_cast<std::size_t>(selection) < textures_.size()) {
+                            view = textures_[static_cast<std::size_t>(selection)].view();
+                        }
+                        imageInfos.push_back({sampler_, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
+                        write.pImageInfo = &imageInfos.back();
+                    }
+                    writes.push_back(write);
+                }
+            }
+            if (!writes.empty()) {
+                vkUpdateDescriptorSets(device_.logicalDevice(), static_cast<std::uint32_t>(writes.size()),
+                                       writes.data(), 0, nullptr);
+            }
+            reusableResources = std::make_shared<material::MaterialResources>(
+                device_.logicalDevice(), materialLayout, descriptorPool, std::move(materialSets),
+                std::move(materialBuffer), reflection.layoutHash);
+            materialLayout = VK_NULL_HANDLE;
+            ownsMaterialLayout = false;
+            descriptorPool = VK_NULL_HANDLE;
         }
 
         auto state = std::make_unique<material::GpuState>(
-            device_.logicalDevice(), materialLayout, descriptorPool, std::move(materialSets),
-            std::move(materialBuffer), pipelineLayout, pipeline, reflection, generation);
-        materialLayout = VK_NULL_HANDLE;
-        descriptorPool = VK_NULL_HANDLE;
+            device_.logicalDevice(), std::move(reusableResources), pipelineLayout, pipeline,
+            reflection, generation);
         pipelineLayout = VK_NULL_HANDLE;
         pipeline = VK_NULL_HANDLE;
         vkDestroyShaderModule(device_.logicalDevice(), fragment, nullptr);
@@ -619,7 +642,7 @@ std::unique_ptr<material::GpuState> ForwardPass::buildGpuState(
         if (descriptorPool != VK_NULL_HANDLE) {
             vkDestroyDescriptorPool(device_.logicalDevice(), descriptorPool, nullptr);
         }
-        if (materialLayout != VK_NULL_HANDLE) {
+        if (materialLayout != VK_NULL_HANDLE && ownsMaterialLayout) {
             vkDestroyDescriptorSetLayout(device_.logicalDevice(), materialLayout, nullptr);
         }
         throw;

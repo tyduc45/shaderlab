@@ -15,6 +15,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <variant>
 
 namespace shaderlab::render {
 namespace {
@@ -191,6 +192,31 @@ bool Renderer::shaderReloadInFlight() const noexcept {
     return shaderReloads_.inFlight() || gpuBuildsInFlight_ != 0;
 }
 
+bool Renderer::setMaterialFloat(const std::string_view name, const float value) {
+    auto& parameters = forwardPass_->materialAsset().parameters();
+    const auto found = parameters.find(std::string(name));
+    if (found == parameters.end() || found->second.type != shader::MaterialValueType::Float) {
+        return false;
+    }
+    auto* stored = std::get_if<float>(&found->second.value);
+    if (stored == nullptr) {
+        return false;
+    }
+    *stored = value;
+    forwardPass_->projectMaterialAsset();
+    return true;
+}
+
+std::optional<float> Renderer::materialFloat(const std::string_view name) const {
+    const auto& parameters = forwardPass_->materialAsset().parameters();
+    const auto found = parameters.find(std::string(name));
+    if (found == parameters.end() || found->second.type != shader::MaterialValueType::Float) {
+        return std::nullopt;
+    }
+    const auto* stored = std::get_if<float>(&found->second.value);
+    return stored != nullptr ? std::optional<float>(*stored) : std::nullopt;
+}
+
 void Renderer::processShaderReloads() {
     if (auto compile = shaderReloads_.pollCurrent()) {
         if (!compile->success) {
@@ -202,17 +228,23 @@ void Renderer::processShaderReloads() {
             auto metadata = std::move(compile->metadata);
             ForwardPass* const pass = forwardPass_.get();
             auto materialAsset = pass->materialAsset();
-            materialAsset.reconcile(reflection, metadata);
+            const std::size_t resetCount = materialAsset.reconcile(reflection, metadata);
+            auto reusableResources = pass->reusableMaterialResources(reflection.layoutHash);
             ++gpuBuildsInFlight_;
             try {
                 gpuBuildJobs_.submit([this, pass, generation, spirv = std::move(spirv),
                                       reflection = std::move(reflection),
                                       materialAsset = std::move(materialAsset),
-                                      metadata = std::move(metadata)]() mutable {
+                                      metadata = std::move(metadata),
+                                      resetCount,
+                                      reusableResources = std::move(reusableResources)]() mutable {
                     GpuBuildResult result;
                     result.generation = generation;
+                    result.reusedMaterialResources = static_cast<bool>(reusableResources);
+                    result.resetParameterCount = resetCount;
                     try {
-                        result.state = pass->buildGpuState(spirv, reflection, materialAsset, generation);
+                        result.state = pass->buildGpuState(spirv, reflection, materialAsset,
+                                                           std::move(reusableResources), generation);
                         result.materialAsset = std::move(materialAsset);
                         result.metadata = std::move(metadata);
                     } catch (const std::exception& error) {
@@ -241,6 +273,17 @@ void Renderer::processShaderReloads() {
                                         "Shader generation " + std::to_string(result->generation) +
                                             " pipeline creation failed: " + result->error);
             continue;
+        }
+        if (result->reusedMaterialResources) {
+            core::Log::instance().write(core::LogLevel::Info,
+                                        "Shader generation " + std::to_string(result->generation) +
+                                            " reused the live material descriptor layout");
+        }
+        if (result->resetParameterCount != 0) {
+            core::Log::instance().write(
+                core::LogLevel::Warning,
+                std::to_string(result->resetParameterCount) +
+                    " material parameter(s) reset because the reflected type changed");
         }
         forwardPass_->stageGpuState(std::move(result->state), std::move(result->materialAsset),
                                     std::move(result->metadata));

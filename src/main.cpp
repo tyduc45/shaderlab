@@ -32,8 +32,13 @@ bool shaderReloadStressTestRequested() {
     return environmentFlagRequested(L"SHADERLAB_RELOAD_STRESS_TEST");
 }
 
+bool materialSmokeTestRequested() {
+    return environmentFlagRequested(L"SHADERLAB_MATERIAL_SMOKE_TEST");
+}
+
 bool headlessTestRequested() {
-    return smokeTestRequested() || shaderReloadSmokeTestRequested() || shaderReloadStressTestRequested();
+    return smokeTestRequested() || shaderReloadSmokeTestRequested() ||
+           shaderReloadStressTestRequested() || materialSmokeTestRequested();
 }
 
 std::filesystem::path requestedModelPath() {
@@ -72,6 +77,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
 
         const bool shaderReloadSmokeTest = shaderReloadSmokeTestRequested();
         const bool shaderReloadStressTest = shaderReloadStressTestRequested();
+        const bool materialSmokeTest = materialSmokeTestRequested();
         const bool smokeTest = headlessTestRequested();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
@@ -102,12 +108,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     expectedShaderGeneration = renderer.requestShaderReload();
                 }
                 renderer.waitForShaderReload();
+            } else if (materialSmokeTest) {
+                expectedShaderGeneration = renderer.requestShaderReload();
+                renderer.waitForShaderReload();
             }
             for (int frame = 0; frame < 4; ++frame) {
                 renderer.drawFrame();
             }
             device.waitIdle();
-            if ((shaderReloadSmokeTest || shaderReloadStressTest) &&
+            if ((shaderReloadSmokeTest || shaderReloadStressTest || materialSmokeTest) &&
                 renderer.lastAppliedShaderGeneration() != expectedShaderGeneration) {
                 throw std::runtime_error("Latest shader generation was not applied");
             }
@@ -122,6 +131,24 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 device.waitIdle();
                 if (renderer.lastAppliedShaderGeneration() != expectedShaderGeneration) {
                     throw std::runtime_error("Failed shader compilation replaced the live GPU state");
+                }
+            }
+            if (materialSmokeTest) {
+                constexpr float editedStrength = 0.125F;
+                if (!renderer.setMaterialFloat("engravingStrength", editedStrength)) {
+                    throw std::runtime_error("Reflected material float was not available");
+                }
+                renderer.drawFrame();
+                expectedShaderGeneration = renderer.requestShaderReload();
+                renderer.waitForShaderReload();
+                for (int frame = 0; frame < 4; ++frame) {
+                    renderer.drawFrame();
+                }
+                device.waitIdle();
+                const auto retained = renderer.materialFloat("engravingStrength");
+                if (renderer.lastAppliedShaderGeneration() != expectedShaderGeneration ||
+                    !retained || *retained != editedStrength) {
+                    throw std::runtime_error("Material value did not survive a layout-unchanged reload");
                 }
             }
             if (shaderReloadStressTest && device.deletionQueue().pendingCount() != 0) {
